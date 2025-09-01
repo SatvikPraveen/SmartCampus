@@ -1,0 +1,80 @@
+# Location: .editorconfig
+# EditorConfig is awesome: https://EditorConfig.org
+
+# Top-most EditorConfig file
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Java files
+[*.java]
+indent_size = 4
+max_line_length = 120
+continuation_indent_size = 8
+
+# XML files (Maven, Spring configs)
+[*.{xml,xsd}]
+indent_size = 2
+max_line_length = 120
+
+# Properties files
+[*.properties]
+indent_size = 2
+max_line_length = 120
+
+# YAML files (Spring Boot configs, Docker Compose)
+[*.{yml,yaml}]
+indent_size = 2
+max_line_length = 120
+
+# JSON files
+[*.json]
+indent_size = 2
+max_line_length = 120
+
+# JavaScript and TypeScript (if used for frontend)
+[*.{js,jsx,ts,tsx}]
+indent_size = 2
+max_line_length = 100
+
+# CSS and SCSS
+[*.{css,scss,sass}]
+indent_size = 2
+max_line_length = 120
+
+# HTML files
+[*.{html,htm}]
+indent_size = 2
+max_line_length = 120
+
+# Markdown files
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+max_line_length = 80
+
+# SQL files
+[*.sql]
+indent_size = 2
+max_line_length = 120
+
+# Shell scripts
+[*.{sh,bash}]
+indent_size = 2
+max_line_length = 100
+
+# Docker files
+[{Dockerfile,*.dockerfile}]
+indent_size = 2
+max_line_length = 120
+
+# Configuration files
+[{*.conf,*.config}]
+indent_size = 2
+max_line_length = 120

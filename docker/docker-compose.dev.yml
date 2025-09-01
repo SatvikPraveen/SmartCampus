@@ -1,0 +1,353 @@
+# Location: docker/docker-compose.dev.yml
+# SmartCampus Docker Compose Development Configuration
+# Optimized for development with hot reload and debugging
+
+version: "3.8"
+
+# Networks
+networks:
+  smartcampus-dev:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+# Volumes for development
+volumes:
+  postgres-dev-data:
+    driver: local
+  redis-dev-data:
+    driver: local
+  maven-cache:
+    driver: local
+  app-dev-logs:
+    driver: local
+
+services:
+  # PostgreSQL Database for Development
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: smartcampus-postgres-dev
+    hostname: postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smartcampus_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+      - ../src/main/resources/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../src/main/resources/data:/docker-entrypoint-initdb.d/data:ro
+      - ./init-dev-data.sql:/docker-entrypoint-initdb.d/02-dev-data.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - smartcampus-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev_user -d smartcampus_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    command: >
+      postgres
+      -c log_statement=all
+      -c log_destination=stderr
+      -c log_min_duration_statement=0
+      -c shared_preload_libraries=pg_stat_statements
+
+  # Redis for Development
+  redis-dev:
+    image: redis:7-alpine
+    container_name: smartcampus-redis-dev
+    hostname: redis-dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-dev-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - smartcampus-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # SmartCampus Application - Development Mode
+  smartcampus-app-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder
+      args:
+        JAVA_VERSION: 17
+    container_name: smartcampus-app-dev
+    hostname: smartcampus-app-dev
+    restart: unless-stopped
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+      redis-dev:
+        condition: service_healthy
+    environment:
+      # Development profile
+      SPRING_PROFILES_ACTIVE: dev
+
+      # Server configuration
+      SERVER_PORT: 8080
+
+      # Database configuration
+      DATABASE_URL: jdbc:postgresql://postgres-dev:5432/smartcampus_dev
+      DATABASE_USERNAME: dev_user
+      DATABASE_PASSWORD: dev_password
+
+      # Redis configuration
+      REDIS_HOST: redis-dev
+      REDIS_PORT: 6379
+
+      # Debug configuration
+      JAVA_TOOL_OPTIONS: >-
+        -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+        -Dspring.devtools.restart.enabled=true
+        -Dspring.devtools.livereload.enabled=true
+
+      # JVM settings for development
+      JAVA_OPTS: >-
+        -Xms256m 
+        -Xmx1g
+        -XX:+UseG1GC
+        -Dfile.encoding=UTF-8
+        -Djava.awt.headless=true
+
+      # Application settings
+      APP_CACHE_ENABLED: false
+
+      # Security settings (relaxed for development)
+      JWT_SECRET: dev-secret-key
+      JWT_EXPIRATION: 86400
+
+      # Logging (verbose for development)
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_COM_SMARTCAMPUS: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: DEBUG
+      LOGGING_LEVEL_ORG_HIBERNATE_SQL: DEBUG
+      LOGGING_LEVEL_ORG_HIBERNATE_TYPE: TRACE
+      LOGGING_PATTERN_CONSOLE: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
+
+      # Monitoring
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+
+      # Development tools
+      SPRING_DEVTOOLS_RESTART_ENABLED: true
+      SPRING_DEVTOOLS_LIVERELOAD_ENABLED: true
+    volumes:
+      # Mount source code for hot reload
+      - ../src:/build/src:ro
+      - ../pom.xml:/build/pom.xml:ro
+      - maven-cache:/root/.m2
+      - app-dev-logs:/opt/smartcampus/logs
+      - ./dev-config:/opt/smartcampus/config
+    ports:
+      - "8080:8080" # Application port
+      - "5005:5005" # Debug port
+      - "35729:35729" # Live reload port
+    networks:
+      - smartcampus-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    command: >
+      sh -c "
+        echo 'Starting development server...' &&
+        ./mvnw spring-boot:run 
+        -Dspring-boot.run.profiles=dev 
+        -Dspring-boot.run.jvmArguments='$$JAVA_TOOL_OPTIONS $$JAVA_OPTS'
+      "
+
+  # Development Database Admin (pgAdmin)
+  pgadmin-dev:
+    image: dpage/pgadmin4:latest
+    container_name: smartcampus-pgadmin-dev
+    hostname: pgadmin-dev
+    restart: unless-stopped
+    depends_on:
+      - postgres-dev
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@smartcampus.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_LISTEN_PORT: 80
+    volumes:
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "8081:80"
+    networks:
+      - smartcampus-dev
+    profiles:
+      - admin
+
+  # Redis Admin (Redis Insight)
+  redis-insight-dev:
+    image: redislabs/redisinsight:latest
+    container_name: smartcampus-redis-insight-dev
+    hostname: redis-insight-dev
+    restart: unless-stopped
+    depends_on:
+      - redis-dev
+    ports:
+      - "8082:8001"
+    networks:
+      - smartcampus-dev
+    profiles:
+      - admin
+
+  # MailHog for email testing
+  mailhog-dev:
+    image: mailhog/mailhog:latest
+    container_name: smartcampus-mailhog-dev
+    hostname: mailhog-dev
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web UI port
+    networks:
+      - smartcampus-dev
+    profiles:
+      - mail
+
+  # Swagger UI for API documentation
+  swagger-ui-dev:
+    image: swaggerapi/swagger-ui:latest
+    container_name: smartcampus-swagger-dev
+    hostname: swagger-ui-dev
+    restart: unless-stopped
+    depends_on:
+      - smartcampus-app-dev
+    environment:
+      SWAGGER_JSON_URL: http://smartcampus-app-dev:8080/v3/api-docs
+      BASE_URL: /swagger
+    ports:
+      - "8083:8080"
+    networks:
+      - smartcampus-dev
+    profiles:
+      - docs
+
+  # Jaeger for distributed tracing
+  jaeger-dev:
+    image: jaegertracing/all-in-one:latest
+    container_name: smartcampus-jaeger-dev
+    hostname: jaeger-dev
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "14268:14268" # Jaeger collector HTTP
+      - "14250:14250" # Jaeger collector gRPC
+      - "6831:6831/udp" # Jaeger agent UDP
+    networks:
+      - smartcampus-dev
+    profiles:
+      - tracing
+
+  # Prometheus for development monitoring
+  prometheus-dev:
+    image: prom/prometheus:latest
+    container_name: smartcampus-prometheus-dev
+    hostname: prometheus-dev
+    restart: unless-stopped
+    depends_on:
+      - smartcampus-app-dev
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+      - "--log.level=debug"
+    volumes:
+      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - smartcampus-dev
+    profiles:
+      - monitoring
+
+  # Grafana for development dashboards
+  grafana-dev:
+    image: grafana/grafana:latest
+    container_name: smartcampus-grafana-dev
+    hostname: grafana-dev
+    restart: unless-stopped
+    depends_on:
+      - prometheus-dev
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ALLOW_EMBEDDING: true
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+      GF_LOG_LEVEL: debug
+    volumes:
+      - ./monitoring/grafana-dev:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - smartcampus-dev
+    profiles:
+      - monitoring
+
+  # Development proxy (Nginx) with auto-reload
+  nginx-dev:
+    image: nginx:alpine
+    container_name: smartcampus-nginx-dev
+    hostname: nginx-dev
+    restart: unless-stopped
+    depends_on:
+      - smartcampus-app-dev
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/includes:/etc/nginx/includes:ro
+    ports:
+      - "80:80"
+    networks:
+      - smartcampus-dev
+    profiles:
+      - proxy
+
+  # Development file watcher for automatic rebuilds
+  file-watcher-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.watcher
+    container_name: smartcampus-file-watcher-dev
+    hostname: file-watcher-dev
+    restart: unless-stopped
+    volumes:
+      - ../src:/watch/src:ro
+      - ../pom.xml:/watch/pom.xml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINER_NAME: smartcampus-app-dev
+      WATCH_PATHS: "/watch/src,/watch/pom.xml"
+      REBUILD_COMMAND: "docker-compose -f docker-compose.dev.yml restart smartcampus-app-dev"
+    networks:
+      - smartcampus-dev
+    profiles:
+      - watcher
+
+# Development-specific overrides
+x-common-variables: &common-variables
+  ENVIRONMENT: development
+  DEBUG: true
+  LOG_LEVEL: DEBUG

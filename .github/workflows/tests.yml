@@ -1,0 +1,809 @@
+# Location: .github/workflows/tests.yml
+# SmartCampus Test Automation Workflow
+# Dedicated workflow for comprehensive testing
+
+name: Test Automation
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: "Type of tests to run"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - unit
+          - integration
+          - functional
+          - performance
+          - security
+          - mutation
+      environment:
+        description: "Environment to test against"
+        required: false
+        default: "test"
+        type: choice
+        options:
+          - test
+          - staging
+      parallel:
+        description: "Run tests in parallel"
+        required: false
+        default: true
+        type: boolean
+
+env:
+  JAVA_VERSION: "17"
+  MAVEN_OPTS: -Xmx3g
+  TESTCONTAINERS_RYUK_DISABLED: true
+
+jobs:
+  # Job 1: Test Matrix Setup
+  setup:
+    name: Setup Test Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      test-matrix: ${{ steps.matrix.outputs.test-matrix }}
+      run-integration: ${{ steps.matrix.outputs.run-integration }}
+      run-functional: ${{ steps.matrix.outputs.run-functional }}
+      run-performance: ${{ steps.matrix.outputs.run-performance }}
+      run-security: ${{ steps.matrix.outputs.run-security }}
+      run-mutation: ${{ steps.matrix.outputs.run-mutation }}
+
+    steps:
+      - name: Determine test matrix
+        id: matrix
+        run: |
+          TEST_TYPE="${{ github.event.inputs.test_type || 'all' }}"
+
+          if [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "unit" ]; then
+            echo "test-matrix=[\"17\", \"21\"]" >> $GITHUB_OUTPUT
+          else
+            echo "test-matrix=[\"17\"]" >> $GITHUB_OUTPUT
+          fi
+
+          echo "run-integration=$( [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "integration" ] && echo true || echo false )" >> $GITHUB_OUTPUT
+          echo "run-functional=$( [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "functional" ] && echo true || echo false )" >> $GITHUB_OUTPUT
+          echo "run-performance=$( [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "performance" ] && echo true || echo false )" >> $GITHUB_OUTPUT
+          echo "run-security=$( [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "security" ] && echo true || echo false )" >> $GITHUB_OUTPUT
+          echo "run-mutation=$( [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "mutation" ] && echo true || echo false )" >> $GITHUB_OUTPUT
+
+  # Job 2: Unit Tests with Matrix
+  unit-tests:
+    name: Unit Tests (Java ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ${{ fromJson(needs.setup.outputs.test-matrix) }}
+        test-group:
+          [models, services, repositories, utils, concurrent, security]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Cache test dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.testcontainers
+          key: ${{ runner.os }}-test-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ matrix.java }}-
+            ${{ runner.os }}-test-
+
+      - name: Run unit tests for ${{ matrix.test-group }}
+        run: |
+          if [ "${{ github.event.inputs.parallel }}" = "true" ]; then
+            PARALLEL_ARGS="-T 1C -Dparallel=all -DthreadCount=4"
+          fi
+
+          mvn test $PARALLEL_ARGS \
+            -Dtest="**/${{ matrix.test-group }}/**/*Test.java" \
+            -DexcludedGroups="integration,functional,performance,security" \
+            -Djacoco.destFile=target/jacoco-${{ matrix.test-group }}.exec \
+            -Dmaven.test.failure.ignore=false
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results-java${{ matrix.java }}-${{ matrix.test-group }}
+          path: |
+            target/surefire-reports/
+            target/jacoco-${{ matrix.test-group }}.exec
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: target/jacoco-${{ matrix.test-group }}.exec
+          flags: unit-tests,java-${{ matrix.java }},${{ matrix.test-group }}
+          name: unit-tests-java${{ matrix.java }}-${{ matrix.test-group }}
+
+  # Job 3: Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.run-integration == 'true'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [postgresql, mysql, h2]
+        include:
+          - database: postgresql
+            db-image: postgres:15
+            db-port: 5432
+            db-name: smartcampus_test
+            db-user: test_user
+            db-pass: test_password
+          - database: mysql
+            db-image: mysql:8.0
+            db-port: 3306
+            db-name: smartcampus_test
+            db-user: test_user
+            db-pass: test_password
+          - database: h2
+            db-image: ""
+            db-port: ""
+            db-name: ""
+            db-user: ""
+            db-pass: ""
+
+    services:
+      database:
+        image: ${{ matrix.db-image }}
+        env:
+          POSTGRES_DB: ${{ matrix.db-name }}
+          POSTGRES_USER: ${{ matrix.db-user }}
+          POSTGRES_PASSWORD: ${{ matrix.db-pass }}
+          MYSQL_DATABASE: ${{ matrix.db-name }}
+          MYSQL_USER: ${{ matrix.db-user }}
+          MYSQL_PASSWORD: ${{ matrix.db-pass }}
+          MYSQL_ROOT_PASSWORD: root_password
+        options: >-
+          --health-cmd="${{ matrix.database == 'postgresql' && 'pg_isready' || matrix.database == 'mysql' && 'mysqladmin ping' || 'echo ok' }}"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        ports:
+          - ${{ matrix.db-port }}:${{ matrix.db-port }}
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Wait for database
+        if: matrix.database != 'h2'
+        run: |
+          if [ "${{ matrix.database }}" = "postgresql" ]; then
+            until pg_isready -h localhost -p ${{ matrix.db-port }} -U ${{ matrix.db-user }}; do
+              echo "Waiting for PostgreSQL..."
+              sleep 2
+            done
+          elif [ "${{ matrix.database }}" = "mysql" ]; then
+            until mysqladmin ping -h localhost -P ${{ matrix.db-port }} -u root -proot_password; do
+              echo "Waiting for MySQL..."
+              sleep 2
+            done
+          fi
+
+      - name: Setup database schema
+        if: matrix.database != 'h2'
+        run: |
+          ./scripts/database/setup-db.sh test \
+            --host localhost \
+            --port ${{ matrix.db-port }} \
+            --db-name ${{ matrix.db-name }} \
+            --db-user ${{ matrix.db-user }} \
+            --db-pass ${{ matrix.db-pass }} \
+            --admin-user ${{ matrix.database == 'postgresql' && 'postgres' || 'root' }} \
+            --admin-pass ${{ matrix.database == 'postgresql' && 'postgres' || 'root_password' }} \
+            --skip-sample-data
+
+      - name: Run integration tests
+        run: |
+          mvn verify \
+            -Dtest="**/*IntegrationTest.java,**/*IT.java" \
+            -Dgroups="integration" \
+            -Dspring.profiles.active=integration-test \
+            -Djacoco.destFile=target/jacoco-integration-${{ matrix.database }}.exec
+        env:
+          DATABASE_URL: ${{ matrix.database == 'h2' && 'jdbc:h2:mem:testdb' || format('jdbc:{0}://localhost:{1}/{2}', matrix.database, matrix.db-port, matrix.db-name) }}
+          DATABASE_USERNAME: ${{ matrix.db-user }}
+          DATABASE_PASSWORD: ${{ matrix.db-pass }}
+          DATABASE_DRIVER: ${{ matrix.database == 'postgresql' && 'org.postgresql.Driver' || matrix.database == 'mysql' && 'com.mysql.cj.jdbc.Driver' || 'org.h2.Driver' }}
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results-${{ matrix.database }}
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            target/jacoco-integration-${{ matrix.database }}.exec
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: target/jacoco-integration-${{ matrix.database }}.exec
+          flags: integration-tests,${{ matrix.database }}
+          name: integration-tests-${{ matrix.database }}
+
+  # Job 4: Functional/E2E Tests
+  functional-tests:
+    name: Functional Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.run-functional == 'true'
+
+    strategy:
+      matrix:
+        browser: [chrome, firefox]
+        include:
+          - browser: chrome
+            browser-version: latest
+          - browser: firefox
+            browser-version: latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Set up browser - ${{ matrix.browser }}
+        if: matrix.browser == 'chrome'
+        uses: browser-actions/setup-chrome@latest
+
+      - name: Set up Firefox
+        if: matrix.browser == 'firefox'
+        uses: browser-actions/setup-firefox@latest
+
+      - name: Start application for E2E tests
+        run: |
+          # Build application if needed
+          mvn package -DskipTests -q
+
+          # Start application in background
+          nohup java -jar target/smartcampus-*.jar \
+            --spring.profiles.active=test \
+            --server.port=8080 \
+            --logging.level.root=WARN > app.log 2>&1 &
+
+          # Wait for application to start
+          timeout 120s bash -c 'until curl -f http://localhost:8080/actuator/health; do sleep 5; done'
+
+      - name: Run functional tests
+        run: |
+          mvn test \
+            -Dtest="**/*FunctionalTest.java,**/*E2ETest.java" \
+            -Dgroups="functional" \
+            -Dwebdriver.browser=${{ matrix.browser }} \
+            -Dwebdriver.headless=true \
+            -Dapp.base.url=http://localhost:8080
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+          FIREFOX_BIN: /usr/bin/firefox
+
+      - name: Upload functional test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: functional-test-results-${{ matrix.browser }}
+          path: |
+            target/surefire-reports/
+            target/screenshots/
+            app.log
+
+      - name: Upload test screenshots
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-screenshots-${{ matrix.browser }}
+          path: target/screenshots/
+
+  # Job 5: Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.run-performance == 'true'
+
+    strategy:
+      matrix:
+        scenario: [load, stress, spike, volume]
+        include:
+          - scenario: load
+            users: 50
+            duration: 5m
+            ramp-up: 1m
+          - scenario: stress
+            users: 200
+            duration: 10m
+            ramp-up: 2m
+          - scenario: spike
+            users: 500
+            duration: 2m
+            ramp-up: 30s
+          - scenario: volume
+            users: 100
+            duration: 30m
+            ramp-up: 5m
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Build application
+        run: mvn package -DskipTests -q
+
+      - name: Start application for performance testing
+        run: |
+          nohup java -jar target/smartcampus-*.jar \
+            --spring.profiles.active=performance \
+            --server.port=8080 \
+            --logging.level.root=WARN \
+            --server.tomcat.max-threads=200 \
+            --spring.datasource.hikari.maximum-pool-size=50 > perf-app.log 2>&1 &
+
+          timeout 120s bash -c 'until curl -f http://localhost:8080/actuator/health; do sleep 5; done'
+
+      - name: Install JMeter
+        run: |
+          wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.5.tgz
+          tar -xzf apache-jmeter-5.5.tgz
+          sudo ln -s $(pwd)/apache-jmeter-5.5/bin/jmeter /usr/local/bin/jmeter
+
+      - name: Run ${{ matrix.scenario }} test
+        run: |
+          jmeter -n \
+            -t src/test/jmeter/${{ matrix.scenario }}-test.jmx \
+            -Jusers=${{ matrix.users }} \
+            -Jduration=${{ matrix.duration }} \
+            -Jramp-up=${{ matrix.ramp-up }} \
+            -l results-${{ matrix.scenario }}.jtl \
+            -e -o performance-report-${{ matrix.scenario }}/
+
+      - name: Analyze performance results
+        run: |
+          # Extract key metrics
+          echo "=== Performance Test Results - ${{ matrix.scenario }} ===" > performance-summary-${{ matrix.scenario }}.txt
+          echo "Users: ${{ matrix.users }}" >> performance-summary-${{ matrix.scenario }}.txt
+          echo "Duration: ${{ matrix.duration }}" >> performance-summary-${{ matrix.scenario }}.txt
+          echo "Ramp-up: ${{ matrix.ramp-up }}" >> performance-summary-${{ matrix.scenario }}.txt
+          echo "" >> performance-summary-${{ matrix.scenario }}.txt
+
+          # Calculate average response time, throughput, error rate
+          awk -F',' '
+          NR>1 { 
+            total_time+=$2; 
+            if($8=="true") errors++; 
+            count++; 
+            if($2>max_time) max_time=$2;
+            if(min_time=="" || $2<min_time) min_time=$2;
+          } 
+          END { 
+            print "Average Response Time: " (total_time/count) " ms";
+            print "Min Response Time: " min_time " ms";
+            print "Max Response Time: " max_time " ms";
+            print "Error Rate: " (errors/count*100) "%";
+            print "Total Samples: " count;
+          }' results-${{ matrix.scenario }}.jtl >> performance-summary-${{ matrix.scenario }}.txt
+
+      - name: Check performance thresholds
+        run: |
+          # Define performance thresholds
+          MAX_AVG_RESPONSE_TIME=2000  # 2 seconds
+          MAX_ERROR_RATE=5            # 5%
+
+          AVG_TIME=$(awk '/Average Response Time:/ {print int($4)}' performance-summary-${{ matrix.scenario }}.txt)
+          ERROR_RATE=$(awk '/Error Rate:/ {print int($3)}' performance-summary-${{ matrix.scenario }}.txt)
+
+          echo "Average Response Time: ${AVG_TIME}ms (Threshold: ${MAX_AVG_RESPONSE_TIME}ms)"
+          echo "Error Rate: ${ERROR_RATE}% (Threshold: ${MAX_ERROR_RATE}%)"
+
+          if [ "$AVG_TIME" -gt "$MAX_AVG_RESPONSE_TIME" ]; then
+            echo "❌ Performance threshold exceeded: Average response time"
+            exit 1
+          fi
+
+          if [ "$ERROR_RATE" -gt "$MAX_ERROR_RATE" ]; then
+            echo "❌ Performance threshold exceeded: Error rate"
+            exit 1
+          fi
+
+          echo "✅ All performance thresholds met"
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-results-${{ matrix.scenario }}
+          path: |
+            results-${{ matrix.scenario }}.jtl
+            performance-report-${{ matrix.scenario }}/
+            performance-summary-${{ matrix.scenario }}.txt
+            perf-app.log
+
+  # Job 6: Security Tests
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.run-security == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Run OWASP Dependency Check
+        run: |
+          mvn org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=7 \
+            -DsuppressionsFile=src/test/resources/owasp-suppressions.xml
+
+      - name: Run SpotBugs Security Analysis
+        run: |
+          mvn spotbugs:check \
+            -Dspotbugs.includeFilterFile=src/test/resources/spotbugs-security.xml
+
+      - name: Run security-focused unit tests
+        run: |
+          mvn test \
+            -Dtest="**/*SecurityTest.java" \
+            -Dgroups="security" \
+            -Djacoco.destFile=target/jacoco-security.exec
+
+      - name: Build application for DAST
+        run: mvn package -DskipTests -q
+
+      - name: Start application for DAST
+        run: |
+          nohup java -jar target/smartcampus-*.jar \
+            --spring.profiles.active=security-test \
+            --server.port=8080 > security-app.log 2>&1 &
+
+          timeout 120s bash -c 'until curl -f http://localhost:8080/actuator/health; do sleep 5; done'
+
+      - name: Run OWASP ZAP DAST
+        uses: zaproxy/action-full-scan@v0.7.0
+        with:
+          target: "http://localhost:8080"
+          rules_file_name: "src/test/resources/zap-rules.tsv"
+          cmd_options: "-a"
+          allow_issue_writing: false
+          fail_action: true
+
+      - name: Upload security test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-test-results
+          path: |
+            target/dependency-check-report.html
+            target/spotbugs.html
+            target/surefire-reports/
+            target/jacoco-security.exec
+            security-app.log
+
+      - name: Upload security coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: target/jacoco-security.exec
+          flags: security-tests
+          name: security-tests
+
+  # Job 7: Mutation Tests
+  mutation-tests:
+    name: Mutation Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.run-mutation == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Run PIT mutation tests
+        run: |
+          mvn org.pitest:pitest-maven:mutationCoverage \
+            -DtargetClasses=com.smartcampus.* \
+            -DtargetTests=com.smartcampus.* \
+            -DmutationThreshold=75 \
+            -DcoverageThreshold=80 \
+            -DoutputFormats=XML,HTML \
+            -DtimeoutConstant=10000 \
+            -DmaxMutationsPerClass=50
+
+      - name: Upload mutation test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-test-results
+          path: |
+            target/pit-reports/
+            target/site/pit-reports/
+
+  # Job 8: Test Report Aggregation
+  test-report:
+    name: Aggregate Test Reports
+    runs-on: ubuntu-latest
+    needs:
+      [
+        unit-tests,
+        integration-tests,
+        functional-tests,
+        performance-tests,
+        security-tests,
+        mutation-tests,
+      ]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: test-artifacts/
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Merge coverage reports
+        run: |
+          mkdir -p target/site/jacoco-aggregate
+
+          # Find all jacoco execution files
+          find test-artifacts/ -name "jacoco*.exec" -exec cp {} target/ \;
+
+          # Merge coverage data
+          mvn jacoco:merge \
+            -Dfileset.directory=target \
+            -Ddestfile=target/jacoco-merged.exec
+
+          # Generate aggregate report
+          mvn jacoco:report \
+            -Ddatafile=target/jacoco-merged.exec \
+            -DoutputDirectory=target/site/jacoco-aggregate
+
+      - name: Generate comprehensive test report
+        run: |
+          mkdir -p target/comprehensive-report
+
+          # Create HTML report combining all test types
+          cat > target/comprehensive-report/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>SmartCampus Comprehensive Test Report</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+                  .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                  .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
+                  .metric-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 15px; text-align: center; }
+                  .metric-value { font-size: 2em; font-weight: bold; color: #495057; }
+                  .metric-label { color: #6c757d; font-size: 0.9em; }
+                  .section { margin-bottom: 30px; }
+                  .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+                  .test-card { border: 1px solid #ddd; border-radius: 6px; padding: 15px; }
+                  .pass { border-left: 4px solid #28a745; }
+                  .fail { border-left: 4px solid #dc3545; }
+                  .warning { border-left: 4px solid #ffc107; }
+                  .links { margin-top: 20px; }
+                  .links a { display: inline-block; margin-right: 15px; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header">
+                      <h1>SmartCampus Test Report</h1>
+                      <p>Generated: $(date)</p>
+                      <p>Build: ${{ github.run_number }} | Commit: ${{ github.sha }}</p>
+                  </div>
+                  
+                  <div class="metrics">
+                      <div class="metric-card">
+                          <div class="metric-value" id="total-tests">-</div>
+                          <div class="metric-label">Total Tests</div>
+                      </div>
+                      <div class="metric-card">
+                          <div class="metric-value" id="passed-tests">-</div>
+                          <div class="metric-label">Passed</div>
+                      </div>
+                      <div class="metric-card">
+                          <div class="metric-value" id="failed-tests">-</div>
+                          <div class="metric-label">Failed</div>
+                      </div>
+                      <div class="metric-card">
+                          <div class="metric-value" id="coverage">-</div>
+                          <div class="metric-label">Coverage</div>
+                      </div>
+                  </div>
+                  
+                  <div class="section">
+                      <h2>Test Results by Type</h2>
+                      <div class="test-grid" id="test-results">
+                          <!-- Test results will be populated here -->
+                      </div>
+                  </div>
+                  
+                  <div class="links">
+                      <a href="jacoco-aggregate/index.html">Coverage Report</a>
+                      <a href="../surefire-report.html">Detailed Results</a>
+                      <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">GitHub Actions</a>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload comprehensive test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: comprehensive-test-report
+          path: |
+            target/comprehensive-report/
+            target/site/jacoco-aggregate/
+
+      - name: Comment PR with test results
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Read test results and create comment
+            const comment = `
+            ## 🧪 Test Results
+
+            | Test Type | Status | Details |
+            |-----------|--------|---------|
+            | Unit Tests | ${{ needs.unit-tests.result == 'success' && '✅ Passed' || '❌ Failed' }} | Multiple Java versions |
+            | Integration Tests | ${{ needs.integration-tests.result == 'success' && '✅ Passed' || needs.integration-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | Multiple databases |
+            | Functional Tests | ${{ needs.functional-tests.result == 'success' && '✅ Passed' || needs.functional-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | Multiple browsers |
+            | Performance Tests | ${{ needs.performance-tests.result == 'success' && '✅ Passed' || needs.performance-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | Load & stress tests |
+            | Security Tests | ${{ needs.security-tests.result == 'success' && '✅ Passed' || needs.security-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | SAST & DAST |
+            | Mutation Tests | ${{ needs.mutation-tests.result == 'success' && '✅ Passed' || needs.mutation-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | Code quality |
+
+            📊 [View Comprehensive Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Job 9: Quality Gate
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs:
+      [
+        unit-tests,
+        integration-tests,
+        functional-tests,
+        performance-tests,
+        security-tests,
+        mutation-tests,
+        test-report,
+      ]
+    if: always()
+
+    steps:
+      - name: Evaluate quality gate
+        run: |
+          echo "=== Quality Gate Evaluation ==="
+
+          UNIT_RESULT="${{ needs.unit-tests.result }}"
+          INTEGRATION_RESULT="${{ needs.integration-tests.result }}"
+          FUNCTIONAL_RESULT="${{ needs.functional-tests.result }}"
+          PERFORMANCE_RESULT="${{ needs.performance-tests.result }}"
+          SECURITY_RESULT="${{ needs.security-tests.result }}"
+          MUTATION_RESULT="${{ needs.mutation-tests.result }}"
+
+          # Required tests (must pass)
+          REQUIRED_TESTS=("$UNIT_RESULT")
+
+          # Optional tests (can be skipped)
+          OPTIONAL_TESTS=("$INTEGRATION_RESULT" "$FUNCTIONAL_RESULT" "$PERFORMANCE_RESULT" "$SECURITY_RESULT" "$MUTATION_RESULT")
+
+          FAILED_REQUIRED=0
+          FAILED_OPTIONAL=0
+
+          for result in "${REQUIRED_TESTS[@]}"; do
+            if [ "$result" = "failure" ]; then
+              FAILED_REQUIRED=$((FAILED_REQUIRED + 1))
+            fi
+          done
+
+          for result in "${OPTIONAL_TESTS[@]}"; do
+            if [ "$result" = "failure" ]; then
+              FAILED_OPTIONAL=$((FAILED_OPTIONAL + 1))
+            fi
+          done
+
+          echo "Failed required tests: $FAILED_REQUIRED"
+          echo "Failed optional tests: $FAILED_OPTIONAL"
+
+          if [ $FAILED_REQUIRED -gt 0 ]; then
+            echo "❌ Quality Gate FAILED: Required tests failed"
+            exit 1
+          elif [ $FAILED_OPTIONAL -gt 2 ]; then
+            echo "❌ Quality Gate FAILED: Too many optional tests failed"
+            exit 1
+          else
+            echo "✅ Quality Gate PASSED"
+          fi

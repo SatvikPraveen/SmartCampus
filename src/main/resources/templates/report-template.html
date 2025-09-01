@@ -1,0 +1,514 @@
+<!-- File location: src/main/resources/templates/report-template.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{reportTitle}} - Smart Campus Report</title>
+    <style>
+      /* ==================== GLOBAL STYLES ==================== */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: #f5f5f5;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background: white;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+      }
+
+      /* ==================== HEADER STYLES ==================== */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 0;
+        border-bottom: 3px solid #2c5aa0;
+        margin-bottom: 30px;
+      }
+
+      .logo-section {
+        display: flex;
+        align-items: center;
+      }
+
+      .logo {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #2c5aa0, #1e3a8a);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 24px;
+        font-weight: bold;
+        margin-right: 20px;
+      }
+
+      .header-info h1 {
+        color: #2c5aa0;
+        font-size: 28px;
+        margin-bottom: 5px;
+      }
+
+      .header-info p {
+        color: #666;
+        font-size: 14px;
+      }
+
+      .report-meta {
+        text-align: right;
+        color: #666;
+      }
+
+      .report-meta h2 {
+        color: #2c5aa0;
+        font-size: 24px;
+        margin-bottom: 10px;
+      }
+
+      .report-meta p {
+        font-size: 14px;
+        margin-bottom: 5px;
+      }
+
+      /* ==================== CONTENT STYLES ==================== */
+      .report-content {
+        margin: 30px 0;
+      }
+
+      .section {
+        margin-bottom: 40px;
+      }
+
+      .section-title {
+        background: linear-gradient(135deg, #2c5aa0, #1e3a8a);
+        color: white;
+        padding: 15px 20px;
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        border-radius: 5px;
+      }
+
+      .section-content {
+        padding: 0 20px;
+      }
+
+      /* ==================== TABLE STYLES ==================== */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .data-table th {
+        background: #f8f9fa;
+        padding: 15px;
+        text-align: left;
+        font-weight: 600;
+        color: #2c5aa0;
+        border-bottom: 2px solid #e9ecef;
+      }
+
+      .data-table td {
+        padding: 12px 15px;
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .data-table tbody tr:hover {
+        background: #f8f9fa;
+      }
+
+      .data-table tbody tr:nth-child(even) {
+        background: #f9f9f9;
+      }
+
+      /* ==================== STATISTICS STYLES ==================== */
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      }
+
+      .stat-card {
+        background: linear-gradient(135deg, #ffffff, #f8f9fa);
+        padding: 25px;
+        border-radius: 10px;
+        border-left: 5px solid #2c5aa0;
+        box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+        text-align: center;
+      }
+
+      .stat-number {
+        font-size: 36px;
+        font-weight: bold;
+        color: #2c5aa0;
+        margin-bottom: 10px;
+      }
+
+      .stat-label {
+        color: #666;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .stat-change {
+        font-size: 12px;
+        margin-top: 5px;
+      }
+
+      .stat-change.positive {
+        color: #28a745;
+      }
+
+      .stat-change.negative {
+        color: #dc3545;
+      }
+
+      /* ==================== CHART PLACEHOLDER ==================== */
+      .chart-container {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        min-height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .chart-placeholder {
+        color: #666;
+        font-size: 16px;
+      }
+
+      /* ==================== SUMMARY STYLES ==================== */
+      .summary-box {
+        background: #e3f2fd;
+        border: 1px solid #90caf9;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+
+      .summary-box h3 {
+        color: #1565c0;
+        margin-bottom: 15px;
+      }
+
+      .summary-box p {
+        color: #424242;
+        line-height: 1.6;
+      }
+
+      /* ==================== FILTERS INFO ==================== */
+      .filters-info {
+        background: #f1f8ff;
+        border: 1px solid #c8e1ff;
+        border-radius: 6px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+
+      .filters-info h4 {
+        color: #0366d6;
+        margin-bottom: 10px;
+        font-size: 16px;
+      }
+
+      .filter-tag {
+        display: inline-block;
+        background: #0366d6;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        margin: 2px;
+      }
+
+      /* ==================== FOOTER STYLES ==================== */
+      .footer {
+        border-top: 2px solid #e9ecef;
+        padding-top: 20px;
+        margin-top: 50px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #666;
+        font-size: 12px;
+      }
+
+      .footer-left p {
+        margin-bottom: 5px;
+      }
+
+      .footer-right {
+        text-align: right;
+      }
+
+      /* ==================== PRINT STYLES ==================== */
+      @media print {
+        body {
+          background: white;
+        }
+
+        .container {
+          box-shadow: none;
+          max-width: none;
+        }
+
+        .section {
+          page-break-inside: avoid;
+        }
+
+        .data-table {
+          page-break-inside: auto;
+        }
+
+        .data-table tr {
+          page-break-inside: avoid;
+        }
+      }
+
+      /* ==================== RESPONSIVE STYLES ==================== */
+      @media (max-width: 768px) {
+        .container {
+          padding: 10px;
+        }
+
+        .header {
+          flex-direction: column;
+          text-align: center;
+        }
+
+        .report-meta {
+          text-align: center;
+          margin-top: 20px;
+        }
+
+        .stats-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .data-table {
+          font-size: 14px;
+        }
+
+        .data-table th,
+        .data-table td {
+          padding: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- ==================== HEADER SECTION ==================== -->
+      <header class="header">
+        <div class="logo-section">
+          <div class="logo">SC</div>
+          <div class="header-info">
+            <h1>Smart Campus</h1>
+            <p>University Management System</p>
+          </div>
+        </div>
+        <div class="report-meta">
+          <h2>{{reportTitle}}</h2>
+          <p><strong>Generated:</strong> {{generationDate}}</p>
+          <p><strong>Period:</strong> {{reportPeriod}}</p>
+          <p><strong>Generated by:</strong> {{generatedBy}}</p>
+        </div>
+      </header>
+
+      <!-- ==================== FILTERS SECTION ==================== -->
+      {{#if filters}}
+      <div class="filters-info">
+        <h4>Applied Filters</h4>
+        {{#each filters}}
+        <span class="filter-tag">{{this.name}}: {{this.value}}</span>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- ==================== SUMMARY SECTION ==================== -->
+      {{#if summary}}
+      <div class="summary-box">
+        <h3>Executive Summary</h3>
+        <p>{{summary}}</p>
+      </div>
+      {{/if}}
+
+      <!-- ==================== STATISTICS SECTION ==================== -->
+      {{#if statistics}}
+      <section class="section">
+        <div class="section-title">Key Statistics</div>
+        <div class="section-content">
+          <div class="stats-grid">
+            {{#each statistics}}
+            <div class="stat-card">
+              <div class="stat-number">{{this.value}}</div>
+              <div class="stat-label">{{this.label}}</div>
+              {{#if this.change}}
+              <div class="stat-change {{this.changeType}}">{{this.change}}</div>
+              {{/if}}
+            </div>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+      {{/if}}
+
+      <!-- ==================== MAIN CONTENT SECTIONS ==================== -->
+      <div class="report-content">
+        {{#each sections}}
+        <section class="section">
+          <div class="section-title">{{this.title}}</div>
+          <div class="section-content">
+            {{#if this.description}}
+            <p style="margin-bottom: 20px; color: #666">{{this.description}}</p>
+            {{/if}} {{#if this.data}}
+            <table class="data-table">
+              <thead>
+                <tr>
+                  {{#each this.headers}}
+                  <th>{{this}}</th>
+                  {{/each}}
+                </tr>
+              </thead>
+              <tbody>
+                {{#each this.data}}
+                <tr>
+                  {{#each this}}
+                  <td>{{this}}</td>
+                  {{/each}}
+                </tr>
+                {{/each}}
+              </tbody>
+            </table>
+            {{/if}} {{#if this.chart}}
+            <div class="chart-container">
+              <div class="chart-placeholder">
+                <p>Chart: {{this.chart.type}}</p>
+                <p>{{this.chart.title}}</p>
+                <small>Chart data: {{this.chart.dataPoints}} points</small>
+              </div>
+            </div>
+            {{/if}} {{#if this.text}}
+            <div style="margin: 20px 0">
+              <p>{{this.text}}</p>
+            </div>
+            {{/if}}
+          </div>
+        </section>
+        {{/each}}
+      </div>
+
+      <!-- ==================== FOOTER SECTION ==================== -->
+      <footer class="footer">
+        <div class="footer-left">
+          <p><strong>Smart Campus Management System</strong></p>
+          <p>{{institutionName}} | {{institutionAddress}}</p>
+          <p>Contact: {{contactEmail}} | {{contactPhone}}</p>
+        </div>
+        <div class="footer-right">
+          <p>Report ID: {{reportId}}</p>
+          <p>
+            Page <span id="pageNumber">1</span> of
+            <span id="totalPages">1</span>
+          </p>
+          <p>Confidential - For Internal Use Only</p>
+        </div>
+      </footer>
+    </div>
+
+    <!-- ==================== JAVASCRIPT FOR DYNAMIC CONTENT ==================== -->
+    <script>
+      // Page numbering for print
+      window.addEventListener("load", function () {
+        // Simple page counting (basic implementation)
+        const pageHeight = 1056; // Approximate A4 height in pixels
+        const contentHeight = document.body.scrollHeight;
+        const totalPages = Math.ceil(contentHeight / pageHeight);
+
+        const totalPagesSpan = document.getElementById("totalPages");
+        if (totalPagesSpan) {
+          totalPagesSpan.textContent = totalPages;
+        }
+      });
+
+      // Print functionality
+      function printReport() {
+        window.print();
+      }
+
+      // Export to PDF (would require additional library in real implementation)
+      function exportToPDF() {
+        // Placeholder for PDF export functionality
+        alert("PDF export functionality would be implemented here");
+      }
+
+      // Dynamic chart rendering (placeholder)
+      function renderChart(containerId, chartData) {
+        // Placeholder for chart rendering
+        const container = document.getElementById(containerId);
+        if (container) {
+          container.innerHTML =
+            "<p>Chart would be rendered here with data: " +
+            JSON.stringify(chartData) +
+            "</p>";
+        }
+      }
+
+      // Highlight search terms if provided
+      function highlightSearchTerms(terms) {
+        if (!terms || terms.length === 0) return;
+
+        const content = document.querySelector(".report-content");
+        let innerHTML = content.innerHTML;
+
+        terms.forEach((term) => {
+          const regex = new RegExp(`(${term})`, "gi");
+          innerHTML = innerHTML.replace(regex, "<mark>$1</mark>");
+        });
+
+        content.innerHTML = innerHTML;
+      }
+
+      // Initialize report features
+      document.addEventListener("DOMContentLoaded", function () {
+        // Add any initialization code here
+        console.log("Smart Campus Report Template Loaded");
+
+        // Add click handlers for interactive elements
+        const statCards = document.querySelectorAll(".stat-card");
+        statCards.forEach((card) => {
+          card.addEventListener("click", function () {
+            // Could show detailed view
+            console.log("Stat card clicked");
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,619 @@
+<!-- File location: src/main/resources/templates/email-template.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>{{emailSubject}} - Smart Campus</title>
+    <!--[if mso]>
+      <noscript>
+        <xml>
+          <o:OfficeDocumentSettings>
+            <o:AllowPNG />
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+          </o:OfficeDocumentSettings>
+        </xml>
+      </noscript>
+    <![endif]-->
+    <style>
+      /* ==================== EMAIL RESET STYLES ==================== */
+      /* Reset styles for email clients */
+      body,
+      table,
+      td,
+      a {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
+      table,
+      td {
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
+      }
+      img {
+        -ms-interpolation-mode: bicubic;
+        border: 0;
+        height: auto;
+        line-height: 100%;
+        outline: none;
+        text-decoration: none;
+      }
+
+      /* Remove spaces around the email in Outlook 2007 and up */
+      table {
+        border-collapse: collapse !important;
+      }
+
+      /* Prevent iOS Mail from adding a download link */
+      .ExternalClass {
+        width: 100%;
+      }
+      .ExternalClass,
+      .ExternalClass p,
+      .ExternalClass span,
+      .ExternalClass font,
+      .ExternalClass td,
+      .ExternalClass div {
+        line-height: 100%;
+      }
+
+      /* ==================== BASE STYLES ==================== */
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100% !important;
+        min-width: 100%;
+        background-color: #f4f4f4;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+
+      .email-container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+      }
+
+      /* ==================== HEADER STYLES ==================== */
+      .header {
+        background: linear-gradient(135deg, #2c5aa0, #1e3a8a);
+        padding: 30px 20px;
+        text-align: center;
+      }
+
+      .logo {
+        display: inline-block;
+        width: 60px;
+        height: 60px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        line-height: 60px;
+        color: #ffffff;
+        font-size: 24px;
+        font-weight: bold;
+        text-decoration: none;
+        margin-bottom: 15px;
+      }
+
+      .header h1 {
+        color: #ffffff;
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+      }
+
+      .header p {
+        color: rgba(255, 255, 255, 0.9);
+        margin: 5px 0 0;
+        font-size: 14px;
+      }
+
+      /* ==================== CONTENT STYLES ==================== */
+      .content {
+        padding: 40px 30px;
+      }
+
+      .greeting {
+        font-size: 18px;
+        color: #2c5aa0;
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
+
+      .message {
+        color: #333333;
+        line-height: 1.6;
+        font-size: 16px;
+        margin-bottom: 25px;
+      }
+
+      .message p {
+        margin: 0 0 15px;
+      }
+
+      /* ==================== NOTIFICATION STYLES ==================== */
+      .notification-box {
+        background-color: #f8f9fa;
+        border-left: 4px solid #2c5aa0;
+        padding: 20px;
+        margin: 25px 0;
+        border-radius: 0 6px 6px 0;
+      }
+
+      .notification-box.success {
+        border-left-color: #28a745;
+        background-color: #d4edda;
+      }
+
+      .notification-box.warning {
+        border-left-color: #ffc107;
+        background-color: #fff3cd;
+      }
+
+      .notification-box.danger {
+        border-left-color: #dc3545;
+        background-color: #f8d7da;
+      }
+
+      .notification-title {
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #2c5aa0;
+      }
+
+      .notification-box.success .notification-title {
+        color: #155724;
+      }
+
+      .notification-box.warning .notification-title {
+        color: #856404;
+      }
+
+      .notification-box.danger .notification-title {
+        color: #721c24;
+      }
+
+      /* ==================== BUTTON STYLES ==================== */
+      .button {
+        display: inline-block;
+        padding: 15px 30px;
+        background: linear-gradient(135deg, #2c5aa0, #1e3a8a);
+        color: #ffffff !important;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 16px;
+        text-align: center;
+        margin: 20px 0;
+        transition: background-color 0.3s ease;
+      }
+
+      .button:hover {
+        background: linear-gradient(135deg, #1e3a8a, #2c5aa0);
+      }
+
+      .button-secondary {
+        background: transparent;
+        color: #2c5aa0 !important;
+        border: 2px solid #2c5aa0;
+      }
+
+      .button-secondary:hover {
+        background: #2c5aa0;
+        color: #ffffff !important;
+      }
+
+      .button-center {
+        text-align: center;
+        margin: 30px 0;
+      }
+
+      /* ==================== DATA TABLE STYLES ==================== */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 25px 0;
+        font-size: 14px;
+      }
+
+      .data-table th {
+        background-color: #f8f9fa;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #2c5aa0;
+        border-bottom: 2px solid #dee2e6;
+      }
+
+      .data-table td {
+        padding: 12px;
+        border-bottom: 1px solid #dee2e6;
+        color: #333333;
+      }
+
+      .data-table tbody tr:nth-child(even) {
+        background-color: #f8f9fa;
+      }
+
+      /* ==================== COURSE/GRADE SPECIFIC STYLES ==================== */
+      .course-info {
+        background: #e3f2fd;
+        padding: 20px;
+        border-radius: 6px;
+        margin: 20px 0;
+      }
+
+      .course-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1565c0;
+        margin-bottom: 10px;
+      }
+
+      .course-details {
+        color: #424242;
+        font-size: 14px;
+      }
+
+      .grade-highlight {
+        display: inline-block;
+        background: #2c5aa0;
+        color: #ffffff;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 18px;
+        margin: 10px 5px;
+      }
+
+      .grade-a {
+        background: #28a745;
+      }
+      .grade-b {
+        background: #17a2b8;
+      }
+      .grade-c {
+        background: #ffc107;
+        color: #212529;
+      }
+      .grade-d {
+        background: #fd7e14;
+      }
+      .grade-f {
+        background: #dc3545;
+      }
+
+      /* ==================== FOOTER STYLES ==================== */
+      .footer {
+        background-color: #f8f9fa;
+        padding: 30px 20px;
+        text-align: center;
+        border-top: 1px solid #dee2e6;
+      }
+
+      .footer-content {
+        color: #6c757d;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .footer-content p {
+        margin: 0 0 10px;
+      }
+
+      .footer-links {
+        margin: 20px 0;
+      }
+
+      .footer-links a {
+        color: #2c5aa0;
+        text-decoration: none;
+        margin: 0 15px;
+        font-weight: 500;
+      }
+
+      .footer-links a:hover {
+        text-decoration: underline;
+      }
+
+      .social-links {
+        margin: 20px 0;
+      }
+
+      .social-links a {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        background: #6c757d;
+        color: #ffffff;
+        text-decoration: none;
+        border-radius: 50%;
+        line-height: 40px;
+        margin: 0 5px;
+        font-size: 16px;
+      }
+
+      /* ==================== MOBILE RESPONSIVE STYLES ==================== */
+      @media only screen and (max-width: 600px) {
+        .email-container {
+          width: 100% !important;
+        }
+
+        .content {
+          padding: 20px 15px !important;
+        }
+
+        .header {
+          padding: 20px 15px !important;
+        }
+
+        .button {
+          display: block !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+
+        .data-table {
+          font-size: 12px !important;
+        }
+
+        .data-table th,
+        .data-table td {
+          padding: 8px 4px !important;
+        }
+
+        .footer {
+          padding: 20px 15px !important;
+        }
+
+        .footer-links a {
+          display: block !important;
+          margin: 10px 0 !important;
+        }
+      }
+
+      /* ==================== DARK MODE SUPPORT ==================== */
+      @media (prefers-color-scheme: dark) {
+        .email-container {
+          background-color: #1a1a1a !important;
+        }
+
+        .content {
+          color: #e0e0e0 !important;
+        }
+
+        .message {
+          color: #e0e0e0 !important;
+        }
+
+        .data-table td {
+          color: #e0e0e0 !important;
+        }
+      }
+
+      /* ==================== PRINT STYLES ==================== */
+      @media print {
+        .email-container {
+          box-shadow: none !important;
+        }
+
+        .button {
+          background: #2c5aa0 !important;
+          color: #ffffff !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <!-- ==================== HEADER SECTION ==================== -->
+      <div class="header">
+        <a href="{{baseUrl}}" class="logo">SC</a>
+        <h1>Smart Campus</h1>
+        <p>{{institutionName}}</p>
+      </div>
+
+      <!-- ==================== MAIN CONTENT ==================== -->
+      <div class="content">
+        <!-- Greeting -->
+        <div class="greeting">Hello {{recipientName}},</div>
+
+        <!-- Main Message -->
+        <div class="message">
+          {{#if customMessage}} {{{customMessage}}} {{else}}
+          <p>
+            We hope this message finds you well. This is an important
+            notification from the Smart Campus system.
+          </p>
+          {{/if}}
+        </div>
+
+        <!-- Notification Box (conditional) -->
+        {{#if notificationType}}
+        <div class="notification-box {{notificationType}}">
+          {{#if notificationTitle}}
+          <div class="notification-title">{{notificationTitle}}</div>
+          {{/if}} {{#if notificationMessage}}
+          <div>{{{notificationMessage}}}</div>
+          {{/if}}
+        </div>
+        {{/if}}
+
+        <!-- Course Information (for course-related emails) -->
+        {{#if courseInfo}}
+        <div class="course-info">
+          <div class="course-title">
+            {{courseInfo.name}} ({{courseInfo.code}})
+          </div>
+          <div class="course-details">
+            <strong>Instructor:</strong> {{courseInfo.instructor}}<br />
+            <strong>Schedule:</strong> {{courseInfo.schedule}}<br />
+            <strong>Semester:</strong> {{courseInfo.semester}}
+            {{courseInfo.year}}
+          </div>
+        </div>
+        {{/if}}
+
+        <!-- Grade Information (for grade notifications) -->
+        {{#if gradeInfo}}
+        <div style="text-align: center; margin: 30px 0">
+          <p style="font-size: 16px; margin-bottom: 15px">
+            Your grade for <strong>{{gradeInfo.courseName}}</strong>:
+          </p>
+          <div class="grade-highlight grade-{{gradeInfo.letterGrade | lower}}">
+            {{gradeInfo.letterGrade}} ({{gradeInfo.percentage}}%)
+          </div>
+          {{#if gradeInfo.gpaPoints}}
+          <p style="margin-top: 15px; color: #666">
+            GPA Points: {{gradeInfo.gpaPoints}}
+          </p>
+          {{/if}}
+        </div>
+        {{/if}}
+
+        <!-- Data Table (for enrollment confirmations, schedules, etc.) -->
+        {{#if tableData}}
+        <table class="data-table">
+          <thead>
+            <tr>
+              {{#each tableData.headers}}
+              <th>{{this}}</th>
+              {{/each}}
+            </tr>
+          </thead>
+          <tbody>
+            {{#each tableData.rows}}
+            <tr>
+              {{#each this}}
+              <td>{{this}}</td>
+              {{/each}}
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+        {{/if}}
+
+        <!-- Action Button (conditional) -->
+        {{#if actionButton}}
+        <div class="button-center">
+          <a href="{{actionButton.url}}" class="button {{actionButton.style}}">
+            {{actionButton.text}}
+          </a>
+          {{#if actionButton.note}}
+          <p style="font-size: 14px; color: #666; margin-top: 10px">
+            {{actionButton.note}}
+          </p>
+          {{/if}}
+        </div>
+        {{/if}}
+
+        <!-- Additional Information -->
+        {{#if additionalInfo}}
+        <div class="message">
+          <h3 style="color: #2c5aa0; margin-bottom: 15px">
+            Additional Information
+          </h3>
+          {{{additionalInfo}}}
+        </div>
+        {{/if}}
+
+        <!-- Important Notice -->
+        {{#if importantNotice}}
+        <div class="notification-box warning">
+          <div class="notification-title">Important Notice</div>
+          <div>{{importantNotice}}</div>
+        </div>
+        {{/if}}
+
+        <!-- Deadline Information -->
+        {{#if deadline}}
+        <div class="notification-box danger">
+          <div class="notification-title">Deadline Reminder</div>
+          <div>
+            <strong>{{deadline.action}}</strong><br />
+            Due: {{deadline.date}} {{deadline.time}}<br />
+            {{#if deadline.note}} {{deadline.note}} {{/if}}
+          </div>
+        </div>
+        {{/if}}
+
+        <!-- Contact Information -->
+        <div class="message">
+          <p>
+            If you have any questions or need assistance, please don't hesitate
+            to contact us:
+          </p>
+          <ul style="margin: 15px 0; padding-left: 20px">
+            <li>
+              Email:
+              <a href="mailto:{{supportEmail}}" style="color: #2c5aa0"
+                >{{supportEmail}}</a
+              >
+            </li>
+            <li>Phone: {{supportPhone}}</li>
+            <li>Office Hours: {{officeHours}}</li>
+          </ul>
+        </div>
+
+        <!-- Closing -->
+        <div class="message">
+          <p>Thank you for using Smart Campus!</p>
+          <p style="margin-top: 20px">
+            Best regards,<br />
+            <strong>{{senderName}}</strong><br />
+            {{senderTitle}}<br />
+            {{institutionName}}
+          </p>
+        </div>
+      </div>
+
+      <!-- ==================== FOOTER SECTION ==================== -->
+      <div class="footer">
+        <div class="footer-content">
+          <p><strong>{{institutionName}}</strong></p>
+          <p>{{institutionAddress}}</p>
+          <p>Phone: {{institutionPhone}} | Email: {{institutionEmail}}</p>
+        </div>
+
+        <div class="footer-links">
+          <a href="{{baseUrl}}/portal">Student Portal</a>
+          <a href="{{baseUrl}}/help">Help Center</a>
+          <a href="{{baseUrl}}/contact">Contact Us</a>
+        </div>
+
+        <div class="social-links">
+          <a href="{{socialLinks.facebook}}" title="Facebook">f</a>
+          <a href="{{socialLinks.twitter}}" title="Twitter">t</a>
+          <a href="{{socialLinks.linkedin}}" title="LinkedIn">in</a>
+          <a href="{{socialLinks.instagram}}" title="Instagram">ig</a>
+        </div>
+
+        <div class="footer-content">
+          <p style="font-size: 12px; margin-top: 20px">
+            This email was sent to {{recipientEmail}}. {{#if unsubscribeUrl}}
+            <a href="{{unsubscribeUrl}}" style="color: #6c757d">Unsubscribe</a>
+            | {{/if}}
+            <a href="{{baseUrl}}/privacy" style="color: #6c757d"
+              >Privacy Policy</a
+            >
+          </p>
+          <p style="font-size: 12px; color: #999; margin-top: 5px">
+            © {{currentYear}} {{institutionName}}. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== EMAIL TRACKING (Optional) ==================== -->
+    {{#if trackingPixel}}
+    <img
+      src="{{trackingPixel}}"
+      width="1"
+      height="1"
+      alt=""
+      style="display: none"
+    />
+    {{/if}}
+  </body>
+</html>

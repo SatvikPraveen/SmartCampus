@@ -1,0 +1,899 @@
+@startuml SmartCampus-Core-Domain
+!theme plain
+title SmartCampus - Core Domain Model
+
+' Location: docs/design/class-diagrams.puml
+
+package "Core Domain" {
+    abstract class User {
+        - String id
+        - String firstName
+        - String lastName
+        - String email
+        - String phoneNumber
+        - LocalDate dateOfBirth
+        - UserRole role
+        - LocalDateTime createdAt
+        - LocalDateTime updatedAt
+        + User(String id, String firstName, String lastName)
+        + String getFullName()
+        + boolean isActive()
+        + void updateProfile(String email, String phone)
+        + {abstract} void displayInfo()
+        + {abstract} boolean hasPermission(String permission)
+    }
+
+    enum UserRole {
+        STUDENT
+        PROFESSOR
+        ADMIN
+        STAFF
+        GUEST
+    }
+
+    class Student {
+        - String studentNumber
+        - String major
+        - int enrollmentYear
+        - double gpa
+        - List<Enrollment> enrollments
+        - StudentStatus status
+        + Student(String id, String firstName, String lastName)
+        + void enroll(Course course)
+        + void withdraw(Course course)
+        + double calculateGPA()
+        + List<Course> getCurrentCourses()
+        + boolean canEnrollIn(Course course)
+        + void updateGPA()
+    }
+
+    class Professor {
+        - String employeeId
+        - String department
+        - String title
+        - double salary
+        - List<Course> taughtCourses
+        - List<String> specializations
+        + Professor(String id, String firstName, String lastName)
+        + void assignCourse(Course course)
+        + void gradeSrudent(Student student, Course course, Grade grade)
+        + List<Student> getStudentsInCourse(Course course)
+        + void createCourse(Course course)
+        + double calculateWorkload()
+    }
+
+    class Admin {
+        - String adminId
+        - String department
+        - List<String> permissions
+        - AdminLevel level
+        + Admin(String id, String firstName, String lastName)
+        + void createUser(User user)
+        + void deactivateUser(String userId)
+        + void assignRole(String userId, UserRole role)
+        + List<User> getAllUsers()
+        + void generateReport(ReportType type)
+    }
+
+    class Course {
+        - String courseId
+        - String title
+        - String description
+        - int credits
+        - String professorId
+        - Department department
+        - int maxEnrollment
+        - int currentEnrollment
+        - Semester semester
+        - int year
+        - CourseStatus status
+        - List<String> prerequisites
+        - Schedule schedule
+        + Course(String courseId, String title, int credits)
+        + boolean canAcceptEnrollment()
+        + void addPrerequisite(String courseId)
+        + boolean hasPrerequisite(String courseId)
+        + void updateSchedule(Schedule schedule)
+        + List<Student> getEnrolledStudents()
+    }
+
+    class Department {
+        - String departmentId
+        - String name
+        - String headOfDepartment
+        - String description
+        - List<Professor> faculty
+        - List<Course> courses
+        - String location
+        - String phoneNumber
+        - String email
+        + Department(String id, String name)
+        + void addProfessor(Professor professor)
+        + void removeProfessor(Professor professor)
+        + void addCourse(Course course)
+        + List<Course> getCoursesByLevel(int level)
+        + int getTotalFaculty()
+    }
+
+    class Enrollment {
+        - String enrollmentId
+        - String studentId
+        - String courseId
+        - LocalDateTime enrollmentDate
+        - EnrollmentStatus status
+        - double finalGrade
+        - List<Grade> grades
+        + Enrollment(String studentId, String courseId)
+        + void updateStatus(EnrollmentStatus status)
+        + void addGrade(Grade grade)
+        + double calculateFinalGrade()
+        + boolean isActive()
+        + void withdraw()
+    }
+
+    class Grade {
+        - String gradeId
+        - String studentId
+        - String courseId
+        - String assignmentName
+        - double points
+        - double maxPoints
+        - GradeType type
+        - LocalDateTime submissionDate
+        - LocalDateTime gradedDate
+        - String feedback
+        + Grade(String studentId, String courseId, double points)
+        + double getPercentage()
+        + GradeLevel getLetterGrade()
+        + boolean isPassing()
+        + void addFeedback(String feedback)
+    }
+
+    class University {
+        - String universityId
+        - String name
+        - String address
+        - String website
+        - String phoneNumber
+        - List<Department> departments
+        - List<User> users
+        - UniversityType type
+        - LocalDate establishedDate
+        + University(String id, String name)
+        + void addDepartment(Department department)
+        + void addUser(User user)
+        + Department findDepartment(String name)
+        + List<Course> getAllCourses()
+        + int getTotalStudents()
+        + int getTotalFaculty()
+    }
+
+    enum CourseStatus {
+        ACTIVE
+        INACTIVE
+        CANCELLED
+        FULL
+        PENDING
+    }
+
+    enum EnrollmentStatus {
+        ENROLLED
+        COMPLETED
+        WITHDRAWN
+        FAILED
+        PENDING
+    }
+
+    enum GradeType {
+        ASSIGNMENT
+        EXAM
+        QUIZ
+        PROJECT
+        PARTICIPATION
+        FINAL
+    }
+
+    enum GradeLevel {
+        A_PLUS
+        A
+        A_MINUS
+        B_PLUS
+        B
+        B_MINUS
+        C_PLUS
+        C
+        C_MINUS
+        D
+        F
+    }
+}
+
+' Relationships
+User <|-- Student
+User <|-- Professor
+User <|-- Admin
+User --> UserRole
+
+Student --> Enrollment : has many
+Professor --> Course : teaches many
+Department --> Professor : has many
+Department --> Course : offers many
+Course --> Department : belongs to
+Course --> CourseStatus
+Enrollment --> Student
+Enrollment --> Course
+Enrollment --> EnrollmentStatus
+Enrollment --> Grade : has many
+Grade --> GradeType
+Grade --> GradeLevel
+University --> Department : has many
+University --> User : has many
+
+@enduml
+
+@startuml SmartCampus-Service-Layer
+!theme plain
+title SmartCampus - Service Layer Architecture
+
+' Location: docs/design/class-diagrams.puml
+
+package "Service Layer" {
+    interface CrudOperations<T, ID> {
+        + T save(T entity)
+        + Optional<T> findById(ID id)
+        + List<T> findAll()
+        + void deleteById(ID id)
+        + boolean existsById(ID id)
+        + long count()
+    }
+
+    interface Searchable<T> {
+        + List<T> search(String query)
+        + List<T> searchByField(String field, String value)
+        + List<T> advancedSearch(SearchCriteria criteria)
+    }
+
+    interface Reportable {
+        + Report generateReport(ReportType type)
+        + void exportReport(Report report, ExportFormat format)
+        + List<ReportMetadata> getAvailableReports()
+    }
+
+    interface Auditable {
+        + void logActivity(String action, String details)
+        + List<AuditLog> getAuditTrail(String entityId)
+        + void enableAuditing()
+        + void disableAuditing()
+    }
+
+    class AuthService {
+        - TokenManager tokenManager
+        - PasswordEncoder passwordEncoder
+        - RoleBasedAccess accessControl
+        + boolean authenticate(String username, String password)
+        + String generateToken(User user)
+        + boolean validateToken(String token)
+        + void logout(String token)
+        + boolean hasPermission(String userId, String permission)
+        + void changePassword(String userId, String newPassword)
+        + void lockAccount(String userId)
+        + void unlockAccount(String userId)
+    }
+
+    class StudentService {
+        - StudentRepository repository
+        - EnrollmentService enrollmentService
+        - GradeService gradeService
+        + Student createStudent(StudentBuilder builder)
+        + void updateStudent(String id, Student student)
+        + List<Student> findByMajor(String major)
+        + List<Student> getHonorStudents()
+        + void transferStudent(String studentId, String newMajor)
+        + List<Course> getStudentCourses(String studentId)
+        + double calculateGPA(String studentId)
+        + List<Student> searchStudents(String query)
+    }
+
+    class CourseService {
+        - CourseRepository repository
+        - DepartmentService departmentService
+        - ProfessorService professorService
+        + Course createCourse(CourseBuilder builder)
+        + void assignProfessor(String courseId, String professorId)
+        + List<Course> findByDepartment(String departmentId)
+        + List<Course> getAvailableCourses()
+        + boolean canStudentEnroll(String studentId, String courseId)
+        + void updateCourseCapacity(String courseId, int newCapacity)
+        + List<Course> searchCourses(String query)
+        + CourseStatistics getCourseStatistics(String courseId)
+    }
+
+    class EnrollmentService {
+        - EnrollmentRepository repository
+        - StudentService studentService
+        - CourseService courseService
+        - NotificationService notificationService
+        + Enrollment enrollStudent(String studentId, String courseId)
+        + void withdrawStudent(String studentId, String courseId)
+        + List<Enrollment> getStudentEnrollments(String studentId)
+        + List<Enrollment> getCourseEnrollments(String courseId)
+        + boolean checkPrerequisites(String studentId, String courseId)
+        + void processWaitlist(String courseId)
+        + EnrollmentStatistics getEnrollmentStatistics()
+    }
+
+    class GradeService {
+        - GradeRepository repository
+        - StudentService studentService
+        - CourseService courseService
+        + Grade submitGrade(String studentId, String courseId, GradeInfo info)
+        + void updateGrade(String gradeId, double newScore)
+        + List<Grade> getStudentGrades(String studentId)
+        + List<Grade> getCourseGrades(String courseId)
+        + double calculateFinalGrade(String studentId, String courseId)
+        + GradeDistribution getGradeDistribution(String courseId)
+        + void generateTranscript(String studentId)
+    }
+
+    class ReportService {
+        - List<ReportGenerator> generators
+        - ExportService exportService
+        + Report generateEnrollmentReport()
+        + Report generateGradeReport(String courseId)
+        + Report generateStudentReport(String studentId)
+        + Report generateDepartmentReport(String departmentId)
+        + void exportReport(Report report, ExportFormat format)
+        + void scheduleReport(ReportType type, CronExpression schedule)
+        + List<Report> getReportHistory()
+    }
+
+    class NotificationService {
+        - List<NotificationChannel> channels
+        - EventManager eventManager
+        + void sendNotification(Notification notification)
+        + void subscribeToEvent(Class<? extends Event> eventType)
+        + void sendEmailNotification(String recipient, String subject, String body)
+        + void sendSMSNotification(String phoneNumber, String message)
+        + void broadcastNotification(String message, List<String> recipients)
+        + NotificationPreferences getUserPreferences(String userId)
+    }
+
+    class SearchService {
+        - List<SearchProvider> providers
+        - IndexManager indexManager
+        + SearchResult search(String query)
+        + SearchResult searchUsers(String query)
+        + SearchResult searchCourses(String query)
+        + SearchResult advancedSearch(SearchCriteria criteria)
+        + void indexEntity(Object entity)
+        + void reindexAll()
+        + SearchStatistics getSearchStatistics()
+    }
+}
+
+package "Repository Layer" {
+    interface Repository<T, ID> {
+        + T save(T entity)
+        + Optional<T> findById(ID id)
+        + List<T> findAll()
+        + void delete(T entity)
+        + void deleteById(ID id)
+        + boolean existsById(ID id)
+    }
+
+    class BaseRepository<T, ID> {
+        # List<T> entities
+        # Class<T> entityClass
+        + T save(T entity)
+        + Optional<T> findById(ID id)
+        + List<T> findAll()
+        + void deleteById(ID id)
+        + boolean existsById(ID id)
+        # void validateEntity(T entity)
+        # ID generateId()
+    }
+
+    class StudentRepository {
+        + List<Student> findByMajor(String major)
+        + List<Student> findByEnrollmentYear(int year)
+        + List<Student> findByGPARange(double min, double max)
+        + List<Student> findHonorStudents()
+        + Optional<Student> findByEmail(String email)
+    }
+
+    class CourseRepository {
+        + List<Course> findByDepartment(String departmentId)
+        + List<Course> findBySemester(Semester semester)
+        + List<Course> findByProfessor(String professorId)
+        + List<Course> findAvailable()
+        + List<Course> findByCredits(int credits)
+    }
+
+    class EnrollmentRepository {
+        + List<Enrollment> findByStudent(String studentId)
+        + List<Enrollment> findByCourse(String courseId)
+        + List<Enrollment> findByStatus(EnrollmentStatus status)
+        + List<Enrollment> findBySemester(Semester semester, int year)
+        + Optional<Enrollment> findByStudentAndCourse(String studentId, String courseId)
+    }
+}
+
+' Relationships
+CrudOperations <|.. BaseRepository
+Repository <|.. BaseRepository
+BaseRepository <|-- StudentRepository
+BaseRepository <|-- CourseRepository
+BaseRepository <|-- EnrollmentRepository
+
+AuthService .> TokenManager
+StudentService .> StudentRepository
+StudentService .> EnrollmentService
+CourseService .> CourseRepository
+EnrollmentService .> EnrollmentRepository
+EnrollmentService .> NotificationService
+GradeService .> GradeRepository
+ReportService .> ExportService
+NotificationService .> EventManager
+SearchService .> IndexManager
+
+Searchable <|.. StudentService
+Searchable <|.. CourseService
+Reportable <|.. ReportService
+Auditable <|.. AuthService
+
+@enduml
+
+@startuml SmartCampus-Design-Patterns
+!theme plain
+title SmartCampus - Design Patterns Implementation
+
+' Location: docs/design/class-diagrams.puml
+
+package "Creational Patterns" {
+    class StudentBuilder {
+        - String id
+        - String firstName
+        - String lastName
+        - String email
+        - String major
+        - int enrollmentYear
+        + StudentBuilder setId(String id)
+        + StudentBuilder setFirstName(String firstName)
+        + StudentBuilder setLastName(String lastName)
+        + StudentBuilder setEmail(String email)
+        + StudentBuilder setMajor(String major)
+        + StudentBuilder setEnrollmentYear(int year)
+        + Student build()
+        - void validate()
+    }
+
+    class CourseBuilder {
+        - String courseId
+        - String title
+        - int credits
+        - String professorId
+        - int maxEnrollment
+        - Semester semester
+        + CourseBuilder setCourseId(String id)
+        + CourseBuilder setTitle(String title)
+        + CourseBuilder setCredits(int credits)
+        + CourseBuilder setProfessorId(String professorId)
+        + CourseBuilder setMaxEnrollment(int max)
+        + CourseBuilder setSemester(Semester semester)
+        + Course build()
+        - void validate()
+    }
+
+    abstract class ServiceFactory {
+        + {static} ServiceFactory getInstance()
+        + {abstract} StudentService createStudentService()
+        + {abstract} CourseService createCourseService()
+        + {abstract} EnrollmentService createEnrollmentService()
+        + {abstract} GradeService createGradeService()
+    }
+
+    class UniversityFactory {
+        + {static} University createUniversity(String name, UniversityType type)
+        + {static} University createDefaultUniversity()
+        + {static} List<Department> createDefaultDepartments()
+        - {static} void validateUniversityData(String name, UniversityType type)
+    }
+
+    class DatabaseConnection {
+        - {static} volatile DatabaseConnection instance
+        - DataSource dataSource
+        - ConnectionPool pool
+        - DatabaseConnection()
+        + {static} DatabaseConnection getInstance()
+        + Connection getConnection()
+        + void releaseConnection(Connection conn)
+        + void closeAll()
+        - void initializeDataSource()
+    }
+}
+
+package "Structural Patterns" {
+    interface UniversitySystem {
+        + List<Student> getStudents()
+        + List<Course> getCourses()
+        + void syncData()
+    }
+
+    class ExternalSystemAdapter {
+        - ExternalLegacySystem legacySystem
+        + ExternalSystemAdapter(ExternalLegacySystem system)
+        + List<Student> getStudents()
+        + List<Course> getCourses()
+        + void syncData()
+        - Student convertLegacyStudent(LegacyStudentData data)
+        - Course convertLegacyCourse(LegacyCourseData data)
+    }
+
+    class AdapterService {
+        - List<UniversitySystem> systems
+        + void addSystem(UniversitySystem system)
+        + List<Student> getAllStudents()
+        + List<Course> getAllCourses()
+        + void syncAllSystems()
+    }
+}
+
+package "Behavioral Patterns" {
+    interface Command {
+        + void execute()
+        + void undo()
+        + String getDescription()
+    }
+
+    class EnrollStudentCommand {
+        - Student student
+        - Course course
+        - EnrollmentService service
+        + EnrollStudentCommand(Student student, Course course, EnrollmentService service)
+        + void execute()
+        + void undo()
+        + String getDescription()
+    }
+
+    class GradeStudentCommand {
+        - String studentId
+        - String courseId
+        - Grade grade
+        - GradeService service
+        + GradeStudentCommand(String studentId, String courseId, Grade grade, GradeService service)
+        + void execute()
+        + void undo()
+        + String getDescription()
+    }
+
+    class CommandProcessor {
+        - Stack<Command> history
+        - int maxHistorySize
+        + void execute(Command command)
+        + void undo()
+        + void redo()
+        + void clearHistory()
+        + List<String> getHistoryDescriptions()
+    }
+
+    interface EventListener {
+        + void handle(Event event)
+        + boolean canHandle(Class<? extends Event> eventType)
+    }
+
+    abstract class Event {
+        - String eventId
+        - LocalDateTime timestamp
+        - String source
+        + Event(String source)
+        + String getEventId()
+        + LocalDateTime getTimestamp()
+        + String getSource()
+        + {abstract} String getEventType()
+    }
+
+    class StudentEnrolledEvent {
+        - Student student
+        - Course course
+        + StudentEnrolledEvent(Student student, Course course)
+        + Student getStudent()
+        + Course getCourse()
+        + String getEventType()
+    }
+
+    class GradeUpdatedEvent {
+        - String studentId
+        - String courseId
+        - Grade oldGrade
+        - Grade newGrade
+        + GradeUpdatedEvent(String studentId, String courseId, Grade oldGrade, Grade newGrade)
+        + String getStudentId()
+        + String getCourseId()
+        + Grade getOldGrade()
+        + Grade getNewGrade()
+        + String getEventType()
+    }
+
+    class EventManager {
+        - Map<Class<? extends Event>, List<EventListener>> listeners
+        - ExecutorService executorService
+        + void subscribe(Class<? extends Event> eventType, EventListener listener)
+        + void unsubscribe(Class<? extends Event> eventType, EventListener listener)
+        + void notify(Event event)
+        + void notifyAsync(Event event)
+        + void shutdown()
+    }
+
+    interface CacheStrategy {
+        + void put(String key, Object value)
+        + Object get(String key)
+        + void evict(String key)
+        + void clear()
+        + int size()
+    }
+
+    class LRUCacheStrategy {
+        - LinkedHashMap<String, Object> cache
+        - int maxSize
+        + LRUCacheStrategy(int maxSize)
+        + void put(String key, Object value)
+        + Object get(String key)
+        + void evict(String key)
+        + void clear()
+        + int size()
+    }
+
+    class FIFOCacheStrategy {
+        - Queue<String> order
+        - Map<String, Object> cache
+        - int maxSize
+        + FIFOCacheStrategy(int maxSize)
+        + void put(String key, Object value)
+        + Object get(String key)
+        + void evict(String key)
+        + void clear()
+        + int size()
+    }
+
+    class CacheManager {
+        - CacheStrategy strategy
+        + CacheManager(CacheStrategy strategy)
+        + void setStrategy(CacheStrategy strategy)
+        + void put(String key, Object value)
+        + Object get(String key)
+        + void evict(String key)
+        + void clear()
+    }
+}
+
+' Relationships
+StudentBuilder ..> Student : creates
+CourseBuilder ..> Course : creates
+ServiceFactory ..> StudentService : creates
+ServiceFactory ..> CourseService : creates
+UniversityFactory ..> University : creates
+DatabaseConnection ..> DataSource : manages
+
+UniversitySystem <|.. ExternalSystemAdapter
+ExternalSystemAdapter ..> ExternalLegacySystem : adapts
+AdapterService o-- UniversitySystem : aggregates
+
+Command <|.. EnrollStudentCommand
+Command <|.. GradeStudentCommand
+CommandProcessor o-- Command : manages
+EventListener <|.. NotificationService
+Event <|-- StudentEnrolledEvent
+Event <|-- GradeUpdatedEvent
+EventManager o-- EventListener : manages
+EventManager ..> Event : handles
+
+CacheStrategy <|.. LRUCacheStrategy
+CacheStrategy <|.. FIFOCacheStrategy
+CacheManager o-- CacheStrategy : uses
+
+@enduml
+
+@startuml SmartCampus-Concurrent-Architecture
+!theme plain
+title SmartCampus - Concurrent Processing Architecture
+
+' Location: docs/design/class-diagrams.puml
+
+package "Concurrent Processing" {
+    class EnrollmentProcessor {
+        - ExecutorService enrollmentExecutor
+        - BlockingQueue<EnrollmentRequest> enrollmentQueue
+        - ConcurrentHashMap<String, EnrollmentStatus> processingStatus
+        - CountDownLatch processingLatch
+        + CompletableFuture<Enrollment> processEnrollmentAsync(EnrollmentRequest request)
+        + List<CompletableFuture<Enrollment>> processBatchEnrollments(List<EnrollmentRequest> requests)
+        + void startProcessing()
+        + void stopProcessing()
+        + EnrollmentStatus getProcessingStatus(String requestId)
+        - void processEnrollmentRequest(EnrollmentRequest request)
+    }
+
+    class DataSyncManager {
+        - ScheduledExecutorService scheduler
+        - List<CompletableFuture<Void>> syncTasks
+        - AtomicBoolean syncInProgress
+        + CompletableFuture<Void> syncStudentData()
+        + CompletableFuture<Void> syncCourseData()
+        + CompletableFuture<Void> syncGradeData()
+        + CompletableFuture<Void> fullSync()
+        + void schedulePeriodicSync(Duration interval)
+        + void cancelSync()
+        + boolean isSyncInProgress()
+    }
+
+    class BatchProcessor {
+        - ForkJoinPool forkJoinPool
+        - int batchSize
+        - int parallelism
+        + <T> CompletableFuture<List<T>> processBatch(List<T> items, Function<T, T> processor)
+        + <T, R> CompletableFuture<List<R>> processAndTransform(List<T> items, Function<T, R> transformer)
+        + CompletableFuture<Void> processGradesBatch(List<Grade> grades)
+        + CompletableFuture<Void> processEnrollmentsBatch(List<Enrollment> enrollments)
+        + void shutdown()
+        - <T> List<List<T>> partitionList(List<T> list, int batchSize)
+    }
+
+    class ConcurrentGradeCalculator {
+        - ParallelStream parallelStream
+        - RecursiveTask<Double> gradeCalculationTask
+        + CompletableFuture<Double> calculateGPAAsync(String studentId)
+        + CompletableFuture<Map<String, Double>> calculateClassAveragesAsync(String courseId)
+        + CompletableFuture<GradeStatistics> calculateGradeStatisticsAsync(List<Grade> grades)
+        + ParallelStream<Grade> getParallelGradeStream(List<Grade> grades)
+        - Double calculateWeightedAverage(List<Grade> grades)
+    }
+
+    class AsyncNotificationSender {
+        - ExecutorService notificationExecutor
+        - CompletionService<NotificationResult> completionService
+        - ConcurrentLinkedQueue<NotificationTask> pendingNotifications
+        + CompletableFuture<Void> sendNotificationAsync(Notification notification)
+        + CompletableFuture<List<NotificationResult>> sendBulkNotificationsAsync(List<Notification> notifications)
+        + void scheduleDelayedNotification(Notification notification, Duration delay)
+        + CompletableFuture<Void> sendEmailAsync(String recipient, String subject, String body)
+        + CompletableFuture<Void> sendSMSAsync(String phoneNumber, String message)
+        + void shutdown()
+    }
+
+    class ThreadSafeCache {
+        - ConcurrentHashMap<String, CacheEntry> cache
+        - ReadWriteLock cacheLock
+        - ScheduledExecutorService cleanupService
+        + void put(String key, Object value, Duration ttl)
+        + Optional<Object> get(String key)
+        + void evict(String key)
+        + void clear()
+        + int size()
+        + void startCleanupTask()
+        - void removeExpiredEntries()
+        - boolean isExpired(CacheEntry entry)
+    }
+
+    class CacheEntry {
+        - Object value
+        - LocalDateTime expiryTime
+        - AtomicLong accessCount
+        + CacheEntry(Object value, Duration ttl)
+        + Object getValue()
+        + boolean isExpired()
+        + void updateAccessCount()
+        + long getAccessCount()
+    }
+
+    interface Callable<V> {
+        + V call()
+    }
+
+    class EnrollmentTask {
+        - EnrollmentRequest request
+        - EnrollmentService service
+        + EnrollmentTask(EnrollmentRequest request, EnrollmentService service)
+        + Enrollment call()
+        - boolean validateEnrollmentRequest()
+        - void handleEnrollmentFailure(Exception e)
+    }
+
+    class GradeCalculationTask {
+        - List<Grade> grades
+        - GradeCalculationStrategy strategy
+        + GradeCalculationTask(List<Grade> grades, GradeCalculationStrategy strategy)
+        + Double call()
+        - Double performCalculation()
+    }
+
+    class NotificationTask {
+        - Notification notification
+        - NotificationChannel channel
+        + NotificationTask(Notification notification, NotificationChannel channel)
+        + NotificationResult call()
+        - void retryOnFailure(int maxRetries)
+    }
+}
+
+package "Synchronization Utilities" {
+    class SynchronizedCounter {
+        - AtomicInteger count
+        + SynchronizedCounter(int initialValue)
+        + int increment()
+        + int decrement()
+        + int get()
+        + void reset()
+        + boolean compareAndSet(int expected, int update)
+    }
+
+    class ReaderWriterLock {
+        - ReadWriteLock lock
+        - Lock readLock
+        - Lock writeLock
+        + ReaderWriterLock()
+        + void acquireReadLock()
+        + void releaseReadLock()
+        + void acquireWriteLock()
+        + void releaseWriteLock()
+        + boolean tryAcquireReadLock(long timeout)
+        + boolean tryAcquireWriteLock(long timeout)
+    }
+
+    class Semaphore {
+        - java.util.concurrent.Semaphore semaphore
+        + Semaphore(int permits)
+        + void acquire()
+        + void release()
+        + boolean tryAcquire(long timeout)
+        + int availablePermits()
+        + void reducePermits(int reduction)
+    }
+}
+
+package "Thread Pools" {
+    class ThreadPoolManager {
+        - Map<String, ExecutorService> threadPools
+        - ThreadFactory customThreadFactory
+        + ExecutorService getThreadPool(String name)
+        + ExecutorService createFixedThreadPool(String name, int threads)
+        + ExecutorService createCachedThreadPool(String name)
+        + ScheduledExecutorService createScheduledThreadPool(String name, int corePoolSize)
+        + ForkJoinPool createForkJoinPool(String name, int parallelism)
+        + void shutdown(String poolName)
+        + void shutdownAll()
+    }
+
+    class CustomThreadFactory {
+        - String threadNamePrefix
+        - AtomicInteger threadNumber
+        - ThreadGroup threadGroup
+        - boolean daemon
+        + CustomThreadFactory(String namePrefix)
+        + Thread newThread(Runnable r)
+        + void setDaemon(boolean daemon)
+        - String createThreadName()
+    }
+}
+
+' Relationships
+EnrollmentProcessor ..> EnrollmentTask : creates
+EnrollmentProcessor ..> CompletableFuture : uses
+DataSyncManager ..> ScheduledExecutorService : uses
+BatchProcessor ..> ForkJoinPool : uses
+ConcurrentGradeCalculator ..> GradeCalculationTask : creates
+AsyncNotificationSender ..> NotificationTask : creates
+ThreadSafeCache o-- CacheEntry : contains
+Callable <|.. EnrollmentTask
+Callable <|.. GradeCalculationTask
+Callable <|.. NotificationTask
+
+ThreadPoolManager ..> ExecutorService : manages
+ThreadPoolManager ..> CustomThreadFactory : uses
+ThreadPoolManager ..> ForkJoinPool : creates
+
+EnrollmentProcessor ..> ThreadPoolManager : uses
+DataSyncManager ..> ThreadPoolManager : uses
+BatchProcessor ..> ThreadPoolManager : uses
+AsyncNotificationSender ..> ThreadPoolManager : uses
+
+@enduml

@@ -1,0 +1,177 @@
+# Location: docker-compose.override.yml
+# SmartCampus Backend - Local Development Overrides
+# This file is automatically loaded by Docker Compose and allows for local customizations
+# without modifying the main docker-compose.yml file
+
+version: '3.8'
+
+services:
+  # SmartCampus Backend Application Overrides
+  smartcampus-backend:
+    # Enable live code reload for development
+    volumes:
+      - ./src:/app/src:ro  # Mount source code as read-only for live reload
+      - ./target:/app/target  # Share target directory for faster builds
+      - ./logs:/app/logs  # Local log directory
+      - ~/.m2:/root/.m2:ro  # Share Maven repository for faster builds
+    
+    environment:
+      # Development-specific environment variables
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+      - SPRING_DEVTOOLS_LIVERELOAD_ENABLED=true
+      - LOGGING_LEVEL_COM_SMARTCAMPUS=DEBUG
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB=DEBUG
+      - DEBUG=true
+      
+    # Override port mapping for development
+    ports:
+      - "${APP_PORT:-8080}:8080"
+      - "35729:35729"  # LiveReload port
+      - "5005:5005"    # Debug port
+    
+    # Add JVM debug options
+    command: >
+      sh -c "
+        java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+        -Dspring.devtools.restart.enabled=true
+        -Dspring.devtools.livereload.enabled=true
+        $$JAVA_OPTS -jar app.jar
+      "
+  
+  # PostgreSQL Development Overrides
+  postgres:
+    # Expose additional ports for development tools
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    
+    # Development-friendly configuration
+    environment:
+      - POSTGRES_LOG_STATEMENT=all  # Log all SQL statements for debugging
+    
+    # Add volume for development SQL scripts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/database:/docker-entrypoint-initdb.d:ro
+      - ./sql:/sql:ro  # Mount SQL files for easy access
+    
+    # Development command with verbose logging
+    command: >
+      postgres
+      -c log_statement=all
+      -c log_connections=on
+      -c log_disconnections=on
+      -c log_duration=on
+      -c shared_preload_libraries=pg_stat_statements
+  
+  # Redis Development Overrides
+  redis:
+    # Expose port for development tools
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    
+    # Development configuration with less security
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+  
+  # MailHog Development Overrides
+  mailhog:
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"  # SMTP port
+      - "${MAILHOG_WEB_PORT:-8025}:8025"   # Web UI port
+
+# Development-specific services
+  # pgAdmin for database management (development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: smartcampus-pgadmin-dev
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@smartcampus.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./config/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      - postgres
+    networks:
+      - smartcampus-network
+    profiles:
+      - dev-tools
+
+  # Redis Commander for Redis management (development only)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: smartcampus-redis-commander-dev
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: redis:redis:6379:0:${REDIS_PASSWORD:-redis_password}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - smartcampus-network
+    profiles:
+      - dev-tools
+
+  # File watcher for automatic restarts (development only)
+  file-watcher:
+    image: node:alpine
+    container_name: smartcampus-file-watcher-dev
+    working_dir: /app
+    volumes:
+      - .:/app:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      sh -c "
+        npm install -g nodemon &&
+        nodemon --watch src --ext java,yml,xml,properties --exec 'echo File changed, restarting...' ||
+        echo 'Nodemon not available, file watching disabled'
+      "
+    profiles:
+      - dev-tools
+    networks:
+      - smartcampus-network
+
+# Development volumes
+volumes:
+  pgadmin_data:
+    driver: local
+
+# Development networks (extends main network)
+networks:
+  smartcampus-network:
+    external: true
+
+# Development-specific configurations
+x-dev-logging: &dev-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Override logging for all services in development
+services:
+  smartcampus-backend:
+    logging: *dev-logging
+  postgres:
+    logging: *dev-logging
+  redis:
+    logging: *dev-logging
+
+# Development environment variables template
+# Copy .env.example to .env and customize as needed
+x-environment-template: &env-template
+  # Database
+  - POSTGRES_DB=${POSTGRES_DB:-smartcampus}
+  - POSTGRES_USER=${POSTGRES_USER:-smartcampus_user}
+  - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartcampus_password}
+  # Redis
+  - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
+  # Application
+  - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+  - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
