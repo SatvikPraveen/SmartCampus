@@ -1,6 +1,5 @@
 # SmartCampus Backend - University Management System
 
-[![Build Status](https://github.com/SatvikPraveen/SmartCampus/actions/workflows/ci.yml/badge.svg)](https://github.com/SatvikPraveen/SmartCampus/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Java Version](https://img.shields.io/badge/Java-17+-blue.svg)](https://openjdk.java.net/projects/jdk/17/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
@@ -21,13 +20,13 @@ SmartCampus follows a modern layered architecture with clear separation of conce
 │           (Business Logic + Transaction Management + Caching)           │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                       Repository Layer                                  │
-│              (Data Access + JPA Repositories + Queries)                │
+│              (Data Access + JPA Repositories + Queries)                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                        Domain Layer                                     │
-│                  (JPA Entities + Domain Models)                        │
+│                  (JPA Entities + Domain Models)                         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                     Infrastructure Layer                                │
-│         (Database + Cache + External APIs + File System)               │
+│         (Database + Cache + External APIs + File System)                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
