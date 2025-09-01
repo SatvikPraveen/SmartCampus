@@ -1,0 +1,27 @@
+course_code,course_name,credits,department_id,professor_id,semester,year,max_enrollment,current_enrollment,course_fee,prerequisites,schedule_days,start_time,end_time,location,description
+CS101,Introduction to Programming,3,1,1,FALL,2024,30,25,150.00,,MWF,09:00,10:00,SCI-101,Fundamental programming concepts using Java
+CS102,Programming II,3,1,1,SPRING,2024,25,20,150.00,CS101,MWF,10:00,11:00,SCI-101,Object-oriented programming and data structures
+CS201,Data Structures and Algorithms,4,1,2,FALL,2024,25,22,200.00,CS102,TR,14:00,15:30,SCI-102,Advanced data structures and algorithm analysis
+CS202,Computer Organization,3,1,3,SPRING,2024,20,18,175.00,CS101,MWF,11:00,12:00,SCI-103,Computer architecture and assembly language
+CS301,Database Systems,3,1,2,FALL,2024,20,15,200.00,CS201,TR,09:30,11:00,SCI-104,Database design and SQL programming
+CS302,Software Engineering,4,1,4,SPRING,2024,18,12,225.00,CS201,MWF,13:00,14:15,SCI-105,Software development methodologies and project management
+CS401,Senior Capstone,3,1,1,SPRING,2024,15,8,250.00,CS301,MW,15:00,16:30,SCI-106,Capstone project integrating computer science concepts
+MATH101,Calculus I,4,2,5,FALL,2024,35,32,125.00,,MTWRF,08:00,09:00,MATH-201,Differential calculus and applications
+MATH102,Calculus II,4,2,5,SPRING,2024,30,28,125.00,MATH101,MTWRF,09:00,10:00,MATH-201,Integral calculus and series
+MATH201,Linear Algebra,3,2,6,FALL,2024,25,20,150.00,MATH102,MWF,11:00,12:00,MATH-202,Matrices vector spaces and linear transformations
+MATH301,Differential Equations,3,2,7,SPRING,2024,20,15,175.00,MATH102,TR,13:00,14:30,MATH-203,Ordinary and partial differential equations
+PHYS101,Physics I,4,3,8,FALL,2024,30,28,175.00,MATH101,MTWF,10:00,11:00,PHYS-101,Mechanics and thermodynamics with lab
+PHYS102,Physics II,4,3,8,SPRING,2024,25,23,175.00,PHYS101,MTWF,11:00,12:00,PHYS-101,Electricity magnetism and optics with lab
+PHYS201,Modern Physics,3,3,9,FALL,2024,20,18,200.00,PHYS102,TR,14:00,15:30,PHYS-102,Quantum mechanics and relativity
+ENG101,Composition I,3,4,10,FALL,2024,25,24,100.00,,MWF,09:00,10:00,ARTS-101,Academic writing and critical thinking
+ENG102,Composition II,3,4,10,SPRING,2024,25,22,100.00,ENG101,MWF,10:00,11:00,ARTS-101,Research writing and argumentation
+ENG201,World Literature,3,4,11,FALL,2024,20,18,125.00,ENG102,TR,11:00,12:30,ARTS-102,Survey of world literary traditions
+ENG301,American Literature,3,4,12,SPRING,2024,18,15,125.00,ENG201,TR,13:00,14:30,ARTS-103,American literary movements and authors
+HIST101,Western Civilization I,3,5,13,FALL,2024,30,27,100.00,,MWF,14:00,15:00,ARTS-201,Ancient and medieval European history
+HIST102,Western Civilization II,3,5,13,SPRING,2024,28,25,100.00,HIST101,MWF,15:00,16:00,ARTS-201,Renaissance to modern European history
+HIST201,American History,3,5,14,FALL,2024,25,23,125.00,,TR,09:30,11:00,ARTS-202,Colonial period to present American history
+PSYC101,Introduction to Psychology,3,6,15,FALL,2024,40,38,100.00,,TR,08:00,09:30,SOC-101,Foundations of psychological science
+PSYC201,Developmental Psychology,3,6,16,SPRING,2024,25,22,125.00,PSYC101,MWF,13:00,14:00,SOC-102,Human development across the lifespan
+ECON101,Microeconomics,3,7,17,FALL,2024,30,28,125.00,,TR,10:00,11:30,BUS-101,Individual and firm economic behavior
+ECON102,Macroeconomics,3,7,17,SPRING,2024,30,26,125.00,ECON101,TR,11:30,13:00,BUS-101,National and international economic systems
+BUS201,Business Management,3,8,18,FALL,2024,25,20,150.00,,MWF,16:00,17:00,BUS-201,Principles of business organization and management

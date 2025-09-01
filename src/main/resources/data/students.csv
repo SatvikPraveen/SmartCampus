@@ -1,0 +1,41 @@
+userId,studentId,firstName,lastName,email,phoneNumber,major,academicYear,gpa,enrollmentDate,departmentId,totalCredits,isOnProbation,isActive,createdAt,lastLoginAt
+USR001,STU123456,Alice,Johnson,alice.johnson@university.edu,(555) 123-4567,Computer Science,SOPHOMORE,3.75,2023-08-15,DEPT_CS,45,false,true,2023-08-15T09:00:00,2024-03-20T14:30:00
+USR002,STU123457,Robert,Williams,robert.williams@university.edu,(555) 234-5678,Computer Science,JUNIOR,3.42,2022-08-20,DEPT_CS,78,false,true,2022-08-20T10:15:00,2024-03-19T16:45:00
+USR003,STU123458,Emma,Brown,emma.brown@university.edu,(555) 345-6789,Mathematics,SENIOR,3.89,2021-08-25,DEPT_MATH,105,false,true,2021-08-25T11:30:00,2024-03-20T09:20:00
+USR004,STU123459,Michael,Davis,michael.davis@university.edu,(555) 456-7890,Engineering,SOPHOMORE,2.95,2023-08-10,DEPT_ENG,42,false,true,2023-08-10T14:00:00,2024-03-18T11:15:00
+USR005,STU123460,Sarah,Miller,sarah.miller@university.edu,(555) 567-8901,Psychology,FRESHMAN,3.25,2024-08-20,DEPT_PSYC,15,false,true,2024-08-20T08:45:00,2024-03-20T13:10:00
+USR006,STU123461,David,Wilson,david.wilson@university.edu,(555) 678-9012,Computer Science,SENIOR,3.68,2021-08-15,DEPT_CS,115,false,true,2021-08-15T12:00:00,2024-03-19T10:30:00
+USR007,STU123462,Jessica,Moore,jessica.moore@university.edu,(555) 789-0123,Biology,JUNIOR,3.33,2022-08-18,DEPT_BIO,72,false,true,2022-08-18T13:15:00,2024-03-20T15:45:00
+USR008,STU123463,James,Taylor,james.taylor@university.edu,(555) 890-1234,Engineering,FRESHMAN,2.85,2024-08-22,DEPT_ENG,12,false,true,2024-08-22T09:30:00,2024-03-20T08:20:00
+USR009,STU123464,Ashley,Anderson,ashley.anderson@university.edu,(555) 901-2345,Mathematics,SOPHOMORE,3.92,2023-08-12,DEPT_MATH,48,false,true,2023-08-12T10:45:00,2024-03-19T17:30:00
+USR010,STU123465,Christopher,Thomas,christopher.thomas@university.edu,(555) 012-3456,Psychology,SENIOR,3.15,2021-08-30,DEPT_PSYC,98,false,true,2021-08-30T15:20:00,2024-03-18T12:40:00
+USR011,STU123466,Amanda,Jackson,amanda.jackson@university.edu,(555) 123-4568,Computer Science,GRADUATE,3.78,2020-08-15,DEPT_CS,150,false,true,2020-08-15T11:00:00,2024-03-20T14:15:00
+USR012,STU123467,Daniel,White,daniel.white@university.edu,(555) 234-5679,Biology,SOPHOMORE,3.05,2023-08-17,DEPT_BIO,39,false,true,2023-08-17T12:30:00,2024-03-19T09:50:00
+USR013,STU123468,Melissa,Harris,melissa.harris@university.edu,(555) 345-6780,Engineering,JUNIOR,3.54,2022-08-25,DEPT_ENG,81,false,true,2022-08-25T14:45:00,2024-03-20T16:20:00
+USR014,STU123469,Kevin,Martin,kevin.martin@university.edu,(555) 456-7891,Mathematics,FRESHMAN,2.78,2024-08-18,DEPT_MATH,9,false,true,2024-08-18T08:15:00,2024-03-19T13:25:00
+USR015,STU123470,Stephanie,Garcia,stephanie.garcia@university.edu,(555) 567-8902,Psychology,JUNIOR,3.41,2022-08-20,DEPT_PSYC,75,false,true,2022-08-20T16:00:00,2024-03-20T10:55:00
+USR016,STU123471,Brian,Rodriguez,brian.rodriguez@university.edu,(555) 678-9013,Computer Science,FRESHMAN,3.12,2024-08-24,DEPT_CS,6,false,true,2024-08-24T09:45:00,2024-03-18T15:10:00
+USR017,STU123472,Nicole,Lewis,nicole.lewis@university.edu,(555) 789-0124,Biology,SENIOR,3.67,2021-08-12,DEPT_BIO,108,false,true,2021-08-12T13:30:00,2024-03-19T11:40:00
+USR018,STU123473,Ryan,Lee,ryan.lee@university.edu,(555) 890-1235,Engineering,SOPHOMORE,1.95,2023-08-14,DEPT_ENG,36,true,true,2023-08-14T10:20:00,2024-03-20T14:05:00
+USR019,STU123474,Lauren,Walker,lauren.walker@university.edu,(555) 901-2346,Mathematics,GRADUATE,3.85,2020-08-22,DEPT_MATH,145,false,true,2020-08-22T15:45:00,2024-03-19T09:15:00
+USR020,STU123475,Justin,Hall,justin.hall@university.edu,(555) 012-3457,Psychology,SOPHOMORE,3.22,2023-08-19,DEPT_PSYC,44,false,true,2023-08-19T11:50:00,2024-03-20T12:30:00
+USR021,STU123476,Samantha,Allen,samantha.allen@university.edu,(555) 123-4569,Computer Science,JUNIOR,3.61,2022-08-16,DEPT_CS,85,false,true,2022-08-16T08:30:00,2024-03-18T16:45:00
+USR022,STU123477,Andrew,Young,andrew.young@university.edu,(555) 234-5680,Biology,FRESHMAN,2.88,2024-08-21,DEPT_BIO,8,false,true,2024-08-21T14:15:00,2024-03-19T10:20:00
+USR023,STU123478,Brittany,Hernandez,brittany.hernandez@university.edu,(555) 345-6781,Engineering,SENIOR,3.76,2021-08-18,DEPT_ENG,112,false,true,2021-08-18T12:45:00,2024-03-20T15:30:00
+USR024,STU123479,Matthew,King,matthew.king@university.edu,(555) 456-7892,Mathematics,JUNIOR,3.38,2022-08-23,DEPT_MATH,79,false,true,2022-08-23T09:10:00,2024-03-19T13:50:00
+USR025,STU123480,Megan,Wright,megan.wright@university.edu,(555) 567-8903,Psychology,FRESHMAN,3.55,2024-08-17,DEPT_PSYC,11,false,true,2024-08-17T16:25:00,2024-03-20T08:40:00
+USR026,STU123481,Joshua,Lopez,joshua.lopez@university.edu,(555) 678-9014,Computer Science,SOPHOMORE,2.67,2023-08-21,DEPT_CS,41,false,true,2023-08-21T10:35:00,2024-03-18T14:20:00
+USR027,STU123482,Rachel,Hill,rachel.hill@university.edu,(555) 789-0125,Biology,GRADUATE,3.91,2020-08-19,DEPT_BIO,155,false,true,2020-08-19T13:00:00,2024-03-19T11:25:00
+USR028,STU123483,Tyler,Scott,tyler.scott@university.edu,(555) 890-1236,Engineering,FRESHMAN,3.08,2024-08-16,DEPT_ENG,5,false,true,2024-08-16T15:40:00,2024-03-20T09:35:00
+USR029,STU123484,Heather,Green,heather.green@university.edu,(555) 901-2347,Mathematics,SOPHOMORE,3.44,2023-08-13,DEPT_MATH,47,false,true,2023-08-13T11:15:00,2024-03-19T16:10:00
+USR030,STU123485,Aaron,Adams,aaron.adams@university.edu,(555) 012-3458,Psychology,SENIOR,3.29,2021-08-28,DEPT_PSYC,102,false,true,2021-08-28T14:50:00,2024-03-20T13:45:00
+USR031,STU123486,Kimberly,Baker,kimberly.baker@university.edu,(555) 123-4570,Computer Science,JUNIOR,3.83,2022-08-14,DEPT_CS,88,false,true,2022-08-14T09:25:00,2024-03-18T15:55:00
+USR032,STU123487,Nathan,Gonzalez,nathan.gonzalez@university.edu,(555) 234-5681,Biology,SOPHOMORE,2.92,2023-08-26,DEPT_BIO,38,false,true,2023-08-26T12:10:00,2024-03-19T10:40:00
+USR033,STU123488,Crystal,Nelson,crystal.nelson@university.edu,(555) 345-6782,Engineering,GRADUATE,3.72,2020-08-17,DEPT_ENG,148,false,true,2020-08-17T16:30:00,2024-03-20T12:15:00
+USR034,STU123489,Jordan,Carter,jordan.carter@university.edu,(555) 456-7893,Mathematics,FRESHMAN,3.18,2024-08-23,DEPT_MATH,7,false,true,2024-08-23T08:20:00,2024-03-19T14:35:00
+USR035,STU123490,Danielle,Mitchell,danielle.mitchell@university.edu,(555) 567-8904,Psychology,JUNIOR,3.56,2022-08-21,DEPT_PSYC,76,false,true,2022-08-21T13:40:00,2024-03-20T11:20:00
+USR036,STU123491,Brandon,Perez,brandon.perez@university.edu,(555) 678-9015,Computer Science,SENIOR,3.47,2021-08-16,DEPT_CS,118,false,true,2021-08-16T10:55:00,2024-03-18T16:25:00
+USR037,STU123492,Courtney,Roberts,courtney.roberts@university.edu,(555) 789-0126,Biology,FRESHMAN,2.73,2024-08-19,DEPT_BIO,10,false,true,2024-08-19T15:05:00,2024-03-19T09:00:00
+USR038,STU123493,Gregory,Turner,gregory.turner@university.edu,(555) 890-1237,Engineering,SOPHOMORE,3.35,2023-08-18,DEPT_ENG,43,false,true,2023-08-18T11:40:00,2024-03-20T14:50:00
+USR039,STU123494,Allison,Phillips,allison.phillips@university.edu,(555) 901-2348,Mathematics,SENIOR,3.81,2021-08-24,DEPT_MATH,109,false,true,2021-08-24T14:25:00,2024-03-19T12:10:00
+USR040,STU123495,Eric,Campbell,eric.campbell@university.edu,(555) 012-3459,Psychology,GRADUATE,3.66,2020-08-20,DEPT_PSYC,142,false,true,2020-08-20T12:35:00,2024-03-20T16:05:00

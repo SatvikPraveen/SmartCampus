@@ -1,0 +1,297 @@
+{
+  "reports": [
+    {
+      "id": 1,
+      "title": "Fall 2024 Enrollment Report",
+      "type": "ENROLLMENT_STATISTICS",
+      "format": "PDF",
+      "generatedDate": "2024-10-15T09:30:00",
+      "generatedBy": "admin@smartcampus.edu",
+      "parameters": {
+        "semester": "Fall 2024",
+        "includeWaitlists": true,
+        "groupByDepartment": true
+      },
+      "metadata": {
+        "totalStudents": 1247,
+        "totalEnrollments": 4523,
+        "averageCreditsPerStudent": 14.2,
+        "capacityUtilization": 0.87
+      },
+      "status": "COMPLETED",
+      "filePath": "/reports/2024/fall/enrollment-statistics-20241015.pdf",
+      "fileSize": 245678
+    },
+    {
+      "id": 2,
+      "title": "Computer Science Department Performance",
+      "type": "DEPARTMENT_PERFORMANCE",
+      "format": "EXCEL",
+      "generatedDate": "2024-10-12T14:15:00",
+      "generatedBy": "dean.cs@smartcampus.edu",
+      "parameters": {
+        "departmentId": 1,
+        "startDate": "2024-01-01",
+        "endDate": "2024-10-12",
+        "includeCharts": true
+      },
+      "metadata": {
+        "totalStudents": 342,
+        "totalCourses": 25,
+        "averageGPA": 3.42,
+        "graduationRate": 0.89,
+        "employmentRate": 0.95
+      },
+      "status": "COMPLETED",
+      "filePath": "/reports/2024/departments/cs-performance-20241012.xlsx",
+      "fileSize": 156789
+    },
+    {
+      "id": 3,
+      "title": "Student Transcript - John Doe",
+      "type": "STUDENT_TRANSCRIPT",
+      "format": "PDF",
+      "generatedDate": "2024-10-10T11:00:00",
+      "generatedBy": "registrar@smartcampus.edu",
+      "parameters": {
+        "studentId": "STU001",
+        "includeUnofficial": false,
+        "watermark": "OFFICIAL"
+      },
+      "metadata": {
+        "studentName": "John Doe",
+        "studentId": "STU001",
+        "gpa": 3.75,
+        "totalCredits": 45,
+        "expectedGraduation": "2027-05-15",
+        "academicStanding": "Good Standing"
+      },
+      "status": "COMPLETED",
+      "filePath": "/reports/2024/transcripts/STU001-transcript-20241010.pdf",
+      "fileSize": 89456,
+      "securityLevel": "CONFIDENTIAL"
+    },
+    {
+      "id": 4,
+      "title": "CS101 Grade Distribution Analysis",
+      "type": "GRADE_DISTRIBUTION",
+      "format": "HTML",
+      "generatedDate": "2024-10-08T16:45:00",
+      "generatedBy": "prof.johnson@smartcampus.edu",
+      "parameters": {
+        "courseId": 1,
+        "semester": "Fall 2024",
+        "includeHistograms": true,
+        "compareWithPrevious": true
+      },
+      "metadata": {
+        "courseCode": "CS101",
+        "courseName": "Introduction to Programming",
+        "studentsEnrolled": 25,
+        "averageGrade": 85.2,
+        "gradeDistribution": {
+          "A": 6,
+          "B": 12,
+          "C": 5,
+          "D": 2,
+          "F": 0
+        },
+        "standardDeviation": 8.7
+      },
+      "status": "COMPLETED",
+      "filePath": "/reports/2024/courses/cs101-grades-20241008.html",
+      "fileSize": 67834
+    },
+    {
+      "id": 5,
+      "title": "Financial Aid Distribution Report",
+      "type": "FINANCIAL_AID",
+      "format": "EXCEL",
+      "generatedDate": "2024-10-05T10:20:00",
+      "generatedBy": "finaid@smartcampus.edu",
+      "parameters": {
+        "academicYear": "2024-2025",
+        "aidTypes": ["SCHOLARSHIP", "GRANT", "LOAN"],
+        "includeDemographics": true
+      },
+      "metadata": {
+        "totalAidDistributed": 5247890.5,
+        "studentsAided": 987,
+        "averageAidPerStudent": 5318.42,
+        "aidBreakdown": {
+          "scholarships": 1245670.25,
+          "grants": 2156789.75,
+          "loans": 1845430.5
+        }
+      },
+      "status": "COMPLETED",
+      "filePath": "/reports/2024/financial/aid-distribution-20241005.xlsx",
+      "fileSize": 234567
+    },
+    {
+      "id": 6,
+      "title": "Predictive Analytics - At-Risk Students",
+      "type": "PREDICTIVE_ANALYTICS",
+      "format": "PDF",
+      "generatedDate": "2024-10-03T08:30:00",
+      "generatedBy": "analytics@smartcampus.edu",
+      "parameters": {
+        "predictionType": "GRADUATION_RISK",
+        "confidenceThreshold": 0.75,
+        "includeMachineLearningModels": true,
+        "forecastPeriod": "2_YEARS"
+      },
+      "metadata": {
+        "studentsAnalyzed": 1247,
+        "studentsAtRisk": 67,
+        "modelAccuracy": 0.89,
+        "primaryRiskFactors": [
+          "Low GPA (< 2.5)",
+          "High absenteeism",
+          "Missing prerequisite courses",
+          "Financial difficulties"
+        ],
+        "interventionRecommendations": 23
+      },
+      "status": "COMPLETED",
+      "filePath": "/reports/2024/analytics/at-risk-students-20241003.pdf",
+      "fileSize": 445678
+    }
+  ],
+  "reportTemplates": [
+    {
+      "id": 1,
+      "name": "Standard Student Transcript",
+      "description": "Official student transcript with all completed coursework",
+      "type": "STUDENT_TRANSCRIPT",
+      "supportedFormats": ["PDF"],
+      "requiredParameters": ["studentId"],
+      "optionalParameters": [
+        "includeUnofficial",
+        "watermark",
+        "includeCourseDescriptions"
+      ],
+      "securityLevel": "CONFIDENTIAL",
+      "template": "/templates/student-transcript.html"
+    },
+    {
+      "id": 2,
+      "name": "Course Enrollment Summary",
+      "description": "Detailed enrollment statistics by course and department",
+      "type": "ENROLLMENT_STATISTICS",
+      "supportedFormats": ["PDF", "EXCEL", "CSV"],
+      "requiredParameters": ["semester"],
+      "optionalParameters": [
+        "departmentId",
+        "includeWaitlists",
+        "groupByDepartment"
+      ],
+      "securityLevel": "INTERNAL",
+      "template": "/templates/enrollment-summary.html"
+    },
+    {
+      "id": 3,
+      "name": "Grade Distribution Analysis",
+      "description": "Statistical analysis of grade distributions with visualizations",
+      "type": "GRADE_DISTRIBUTION",
+      "supportedFormats": ["HTML", "PDF", "JSON"],
+      "requiredParameters": ["courseId"],
+      "optionalParameters": [
+        "semester",
+        "includeHistograms",
+        "compareWithPrevious"
+      ],
+      "securityLevel": "INTERNAL",
+      "template": "/templates/grade-distribution.html"
+    },
+    {
+      "id": 4,
+      "name": "Department Performance Dashboard",
+      "description": "Comprehensive department performance metrics and trends",
+      "type": "DEPARTMENT_PERFORMANCE",
+      "supportedFormats": ["PDF", "EXCEL", "HTML"],
+      "requiredParameters": ["departmentId"],
+      "optionalParameters": [
+        "startDate",
+        "endDate",
+        "includeCharts",
+        "compareToPrevious"
+      ],
+      "securityLevel": "RESTRICTED",
+      "template": "/templates/department-performance.html"
+    }
+  ],
+  "scheduledReports": [
+    {
+      "id": 1,
+      "name": "Weekly Enrollment Report",
+      "reportType": "ENROLLMENT_STATISTICS",
+      "format": "EXCEL",
+      "frequency": "WEEKLY",
+      "dayOfWeek": "MONDAY",
+      "time": "08:00",
+      "timezone": "America/Chicago",
+      "recipients": [
+        "registrar@smartcampus.edu",
+        "admin@smartcampus.edu",
+        "president@smartcampus.edu"
+      ],
+      "parameters": {
+        "includeWaitlists": true,
+        "groupByDepartment": true,
+        "includeCapacityAnalysis": true
+      },
+      "isActive": true,
+      "nextRunDate": "2024-10-21T08:00:00",
+      "lastRunDate": "2024-10-14T08:00:00",
+      "createdBy": "admin@smartcampus.edu",
+      "createdDate": "2024-09-01T10:00:00"
+    },
+    {
+      "id": 2,
+      "name": "Monthly Grade Reports",
+      "reportType": "GRADE_DISTRIBUTION",
+      "format": "PDF",
+      "frequency": "MONTHLY",
+      "dayOfMonth": 1,
+      "time": "06:00",
+      "timezone": "America/Chicago",
+      "recipients": [
+        "dean@smartcampus.edu",
+        "academic-affairs@smartcampus.edu"
+      ],
+      "parameters": {
+        "includeAllCourses": true,
+        "includeHistograms": true,
+        "compareWithPrevious": true
+      },
+      "isActive": true,
+      "nextRunDate": "2024-11-01T06:00:00",
+      "lastRunDate": "2024-10-01T06:00:00",
+      "createdBy": "dean@smartcampus.edu",
+      "createdDate": "2024-08-15T14:30:00"
+    }
+  ],
+  "reportAnalytics": {
+    "totalReportsGenerated": 1247,
+    "reportsThisMonth": 89,
+    "mostRequestedType": "STUDENT_TRANSCRIPT",
+    "averageGenerationTime": 3.4,
+    "popularFormats": {
+      "PDF": 687,
+      "EXCEL": 324,
+      "CSV": 156,
+      "HTML": 80
+    },
+    "userActivity": {
+      "admin@smartcampus.edu": 234,
+      "registrar@smartcampus.edu": 189,
+      "dean@smartcampus.edu": 156,
+      "prof.johnson@smartcampus.edu": 78,
+      "finaid@smartcampus.edu": 45
+    },
+    "errorRate": 0.02,
+    "averageFileSize": 187456,
+    "totalStorageUsed": "234.5 GB"
+  }
+}

@@ -1,0 +1,427 @@
+{
+  "authResponses": {
+    "successfulLogin": {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token",
+      "refreshToken": "refresh.token.test.123456789",
+      "username": "john.doe",
+      "role": "STUDENT",
+      "expiresIn": 86400,
+      "permissions": [
+        "VIEW_COURSES",
+        "ENROLL_COURSES",
+        "VIEW_GRADES",
+        "UPDATE_PROFILE"
+      ]
+    },
+    "invalidCredentials": {
+      "error": "INVALID_CREDENTIALS",
+      "message": "Invalid username or password",
+      "timestamp": "2024-10-15T10:30:00Z"
+    },
+    "accountLocked": {
+      "error": "ACCOUNT_LOCKED",
+      "message": "Account temporarily locked due to multiple failed login attempts",
+      "lockDuration": 1800,
+      "timestamp": "2024-10-15T10:30:00Z"
+    }
+  },
+  "studentResponses": {
+    "studentProfile": {
+      "id": 1,
+      "studentId": "STU001",
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john.doe@smartcampus.edu",
+      "phone": "555-0101",
+      "status": "ACTIVE",
+      "gpa": 3.75,
+      "totalCredits": 45,
+      "enrollmentDate": "2023-08-15",
+      "expectedGraduation": "2027-05-15",
+      "department": {
+        "id": 1,
+        "code": "CS",
+        "name": "Computer Science"
+      },
+      "address": {
+        "street": "123 Main St Apt 1",
+        "city": "College Town",
+        "state": "TX",
+        "zipCode": "75087"
+      }
+    },
+    "studentsList": [
+      {
+        "id": 1,
+        "studentId": "STU001",
+        "fullName": "John Doe",
+        "email": "john.doe@smartcampus.edu",
+        "status": "ACTIVE",
+        "gpa": 3.75,
+        "department": "Computer Science"
+      },
+      {
+        "id": 2,
+        "studentId": "STU002",
+        "fullName": "Jane Smith",
+        "email": "jane.smith@smartcampus.edu",
+        "status": "ACTIVE",
+        "gpa": 3.85,
+        "department": "Computer Science"
+      }
+    ],
+    "searchResults": {
+      "query": "john",
+      "totalResults": 3,
+      "page": 0,
+      "size": 10,
+      "results": [
+        {
+          "id": 1,
+          "studentId": "STU001",
+          "fullName": "John Doe",
+          "email": "john.doe@smartcampus.edu",
+          "matchType": "FIRST_NAME",
+          "relevanceScore": 0.95
+        },
+        {
+          "id": 15,
+          "studentId": "STU015",
+          "fullName": "John Smith",
+          "email": "john.smith@smartcampus.edu",
+          "matchType": "FIRST_NAME",
+          "relevanceScore": 0.9
+        }
+      ]
+    }
+  },
+  "courseResponses": {
+    "courseDetail": {
+      "id": 1,
+      "code": "CS101",
+      "title": "Introduction to Programming",
+      "description": "Fundamental programming concepts using Java",
+      "credits": 3,
+      "maxEnrollment": 30,
+      "currentEnrollment": 25,
+      "waitlistCount": 3,
+      "courseFee": 150.0,
+      "schedule": {
+        "days": "MWF",
+        "startTime": "09:00",
+        "endTime": "10:00",
+        "location": "SCI-101"
+      },
+      "professor": {
+        "id": 1,
+        "name": "Dr. Johnson",
+        "email": "prof.johnson@smartcampus.edu"
+      },
+      "department": {
+        "id": 1,
+        "code": "CS",
+        "name": "Computer Science"
+      },
+      "prerequisites": [],
+      "semester": "FALL",
+      "year": 2024,
+      "isActive": true
+    },
+    "availableCourses": [
+      {
+        "id": 1,
+        "code": "CS101",
+        "title": "Introduction to Programming",
+        "credits": 3,
+        "availableSpots": 5,
+        "professor": "Dr. Johnson",
+        "schedule": "MWF 09:00-10:00"
+      },
+      {
+        "id": 2,
+        "code": "MATH101",
+        "title": "Calculus I",
+        "credits": 4,
+        "availableSpots": 3,
+        "professor": "Dr. Williams",
+        "schedule": "MTWRF 08:00-09:00"
+      }
+    ]
+  },
+  "enrollmentResponses": {
+    "successfulEnrollment": {
+      "id": 1,
+      "student": {
+        "id": 1,
+        "studentId": "STU001",
+        "name": "John Doe"
+      },
+      "course": {
+        "id": 1,
+        "code": "CS101",
+        "title": "Introduction to Programming"
+      },
+      "enrollmentDate": "2024-10-15",
+      "status": "ENROLLED",
+      "message": "Successfully enrolled in CS101"
+    },
+    "waitlistEnrollment": {
+      "id": 2,
+      "student": {
+        "id": 2,
+        "studentId": "STU002",
+        "name": "Jane Smith"
+      },
+      "course": {
+        "id": 1,
+        "code": "CS101",
+        "title": "Introduction to Programming"
+      },
+      "enrollmentDate": "2024-10-15",
+      "status": "WAITLISTED",
+      "waitlistPosition": 1,
+      "message": "Course is full. You have been added to the waitlist at position 1"
+    },
+    "enrollmentError": {
+      "error": "PREREQUISITE_NOT_MET",
+      "message": "You must complete CS101 before enrolling in CS201",
+      "requiredPrerequisites": [
+        {
+          "courseCode": "CS101",
+          "courseName": "Introduction to Programming"
+        }
+      ]
+    }
+  },
+  "gradeResponses": {
+    "studentGrades": [
+      {
+        "courseCode": "CS101",
+        "courseName": "Introduction to Programming",
+        "assignments": [
+          {
+            "name": "Midterm Exam",
+            "type": "EXAM",
+            "pointsEarned": 85.0,
+            "maxPoints": 100.0,
+            "percentage": 85.0,
+            "letterGrade": "B+",
+            "weight": 0.3,
+            "gradedDate": "2024-10-01"
+          },
+          {
+            "name": "Programming Project",
+            "type": "PROJECT",
+            "pointsEarned": 92.0,
+            "maxPoints": 100.0,
+            "percentage": 92.0,
+            "letterGrade": "A-",
+            "weight": 0.4,
+            "gradedDate": "2024-10-08"
+          }
+        ],
+        "currentGrade": 89.1,
+        "letterGrade": "B+",
+        "credits": 3,
+        "semester": "Fall 2024"
+      }
+    ],
+    "transcript": {
+      "student": {
+        "id": 1,
+        "studentId": "STU001",
+        "name": "John Doe",
+        "gpa": 3.75,
+        "totalCredits": 45,
+        "academicStanding": "Good Standing"
+      },
+      "semesters": [
+        {
+          "semester": "Fall 2023",
+          "courses": [
+            {
+              "courseCode": "ENG101",
+              "courseName": "Composition I",
+              "credits": 3,
+              "grade": "A",
+              "gradePoints": 12.0
+            },
+            {
+              "courseCode": "MATH101",
+              "courseName": "Calculus I",
+              "credits": 4,
+              "grade": "B+",
+              "gradePoints": 13.2
+            }
+          ],
+          "semesterGPA": 3.77,
+          "semesterCredits": 7
+        }
+      ]
+    }
+  },
+  "reportResponses": {
+    "reportGenerated": {
+      "id": 12345,
+      "title": "Student Enrollment Report",
+      "type": "ENROLLMENT_STATISTICS",
+      "format": "PDF",
+      "status": "COMPLETED",
+      "generatedDate": "2024-10-15T10:30:00Z",
+      "fileUrl": "/api/reports/12345/download",
+      "fileName": "enrollment-report-20241015.pdf",
+      "fileSize": 245678,
+      "metadata": {
+        "totalStudents": 1247,
+        "totalEnrollments": 4523,
+        "averageCreditsPerStudent": 14.2
+      }
+    },
+    "reportError": {
+      "error": "REPORT_GENERATION_FAILED",
+      "message": "Unable to generate report due to insufficient data",
+      "details": "No enrollment data found for the specified date range"
+    }
+  },
+  "apiResponses": {
+    "success": {
+      "success": true,
+      "message": "Operation completed successfully",
+      "timestamp": "2024-10-15T10:30:00Z"
+    },
+    "validationError": {
+      "success": false,
+      "error": "VALIDATION_ERROR",
+      "message": "Invalid input data",
+      "errors": [
+        {
+          "field": "email",
+          "message": "Email format is invalid"
+        },
+        {
+          "field": "gpa",
+          "message": "GPA must be between 0.0 and 4.0"
+        }
+      ]
+    },
+    "notFound": {
+      "success": false,
+      "error": "RESOURCE_NOT_FOUND",
+      "message": "The requested resource was not found",
+      "resourceType": "Student",
+      "resourceId": "STU999"
+    },
+    "unauthorized": {
+      "success": false,
+      "error": "UNAUTHORIZED",
+      "message": "Authentication required to access this resource"
+    },
+    "forbidden": {
+      "success": false,
+      "error": "FORBIDDEN",
+      "message": "Insufficient permissions to perform this action",
+      "requiredRole": "ADMIN",
+      "currentRole": "STUDENT"
+    },
+    "serverError": {
+      "success": false,
+      "error": "INTERNAL_SERVER_ERROR",
+      "message": "An unexpected error occurred",
+      "errorId": "ERR-2024101510300001",
+      "supportContact": "support@smartcampus.edu"
+    }
+  },
+  "notificationResponses": {
+    "enrollmentConfirmation": {
+      "type": "ENROLLMENT_CONFIRMATION",
+      "recipient": "john.doe@smartcampus.edu",
+      "subject": "Enrollment Confirmation - CS101",
+      "message": "You have been successfully enrolled in CS101 - Introduction to Programming for Fall 2024.",
+      "sentDate": "2024-10-15T10:30:00Z",
+      "status": "SENT"
+    },
+    "gradeNotification": {
+      "type": "GRADE_POSTED",
+      "recipient": "john.doe@smartcampus.edu",
+      "subject": "Grade Posted - CS101 Midterm Exam",
+      "message": "Your grade for the Midterm Exam in CS101 has been posted. Grade: B+ (85/100)",
+      "sentDate": "2024-10-15T14:45:00Z",
+      "status": "SENT"
+    },
+    "paymentReminder": {
+      "type": "PAYMENT_REMINDER",
+      "recipient": "john.doe@smartcampus.edu",
+      "subject": "Tuition Payment Due Reminder",
+      "message": "Your tuition payment of $2,500.00 is due on October 30, 2024.",
+      "sentDate": "2024-10-15T08:00:00Z",
+      "status": "SENT",
+      "dueDate": "2024-10-30",
+      "amount": 2500.0
+    }
+  },
+  "analyticsResponses": {
+    "dashboardData": {
+      "totalStudents": 1247,
+      "totalCourses": 187,
+      "totalProfessors": 89,
+      "averageGPA": 3.42,
+      "enrollmentTrends": [
+        {
+          "semester": "Fall 2023",
+          "enrollment": 1189
+        },
+        {
+          "semester": "Spring 2024",
+          "enrollment": 1205
+        },
+        {
+          "semester": "Fall 2024",
+          "enrollment": 1247
+        }
+      ],
+      "departmentPerformance": [
+        {
+          "department": "Computer Science",
+          "averageGPA": 3.58,
+          "enrollmentCount": 342,
+          "graduationRate": 0.89
+        },
+        {
+          "department": "Mathematics",
+          "averageGPA": 3.31,
+          "enrollmentCount": 234,
+          "graduationRate": 0.82
+        }
+      ],
+      "upcomingDeadlines": [
+        {
+          "type": "REGISTRATION",
+          "description": "Spring 2025 Registration Opens",
+          "date": "2024-11-01"
+        },
+        {
+          "type": "PAYMENT",
+          "description": "Fall 2024 Tuition Payment Due",
+          "date": "2024-10-30"
+        }
+      ]
+    },
+    "performanceMetrics": {
+      "systemUptime": 99.97,
+      "averageResponseTime": 245,
+      "activeUsers": 1847,
+      "peakConcurrentUsers": 523,
+      "errorRate": 0.02,
+      "databaseConnections": {
+        "active": 15,
+        "idle": 85,
+        "maximum": 100
+      },
+      "memoryUsage": {
+        "used": "2.1 GB",
+        "available": "6.9 GB",
+        "percentage": 23.3
+      }
+    }
+  }
+}

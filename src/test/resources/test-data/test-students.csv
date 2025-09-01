@@ -1,0 +1,26 @@
+student_id,first_name,last_name,email,department_id,admission_date,status,year_level,gpa,total_credits,phone,address,emergency_contact,emergency_phone
+STU001,John,Doe,john.doe@smartcampus.edu,1,2023-08-15,ACTIVE,2,3.75,45,555-0101,123 Main St Apt 1,Jane Doe,555-0102
+STU002,Jane,Smith,jane.smith@smartcampus.edu,1,2023-08-15,ACTIVE,2,3.85,48,555-0103,456 Oak Ave,Robert Smith,555-0104
+STU003,Michael,Johnson,michael.johnson@smartcampus.edu,2,2022-08-20,ACTIVE,3,3.45,72,555-0105,789 Pine St,Mary Johnson,555-0106
+STU004,Emily,Davis,emily.davis@smartcampus.edu,1,2024-01-10,ACTIVE,1,3.90,15,555-0107,321 Elm Dr,David Davis,555-0108
+STU005,Christopher,Wilson,chris.wilson@smartcampus.edu,3,2021-08-18,ACTIVE,4,3.60,105,555-0109,654 Maple Ln,Susan Wilson,555-0110
+STU006,Sarah,Brown,sarah.brown@smartcampus.edu,2,2023-01-15,ACTIVE,2,3.25,42,555-0111,987 Cedar St,James Brown,555-0112
+STU007,David,Miller,david.miller@smartcampus.edu,1,2022-08-22,PROBATION,3,2.15,68,555-0113,147 Birch Ave,Lisa Miller,555-0114
+STU008,Ashley,Garcia,ashley.garcia@smartcampus.edu,4,2023-08-15,ACTIVE,2,3.95,51,555-0115,258 Spruce Dr,Carlos Garcia,555-0116
+STU009,Matthew,Martinez,matt.martinez@smartcampus.edu,3,2024-08-20,ACTIVE,1,3.70,12,555-0117,369 Willow St,Maria Martinez,555-0118
+STU010,Jessica,Anderson,jess.anderson@smartcampus.edu,2,2022-01-12,ACTIVE,3,3.55,78,555-0119,741 Poplar Ln,Kevin Anderson,555-0120
+STU011,Daniel,Taylor,dan.taylor@smartcampus.edu,1,2021-08-16,ACTIVE,4,3.40,98,555-0121,852 Hickory Ave,Nancy Taylor,555-0122
+STU012,Amanda,Thomas,amanda.thomas@smartcampus.edu,4,2023-01-18,ACTIVE,2,3.80,45,555-0123,963 Ash Dr,William Thomas,555-0124
+STU013,Joshua,Jackson,josh.jackson@smartcampus.edu,3,2024-01-08,ACTIVE,1,3.65,18,555-0125,159 Beech St,Patricia Jackson,555-0126
+STU014,Megan,White,megan.white@smartcampus.edu,2,2022-08-25,SUSPENDED,3,2.85,69,555-0127,753 Chestnut Ln,Mark White,555-0128
+STU015,Ryan,Harris,ryan.harris@smartcampus.edu,1,2023-08-20,ACTIVE,2,3.50,48,555-0129,486 Sycamore Ave,Jennifer Harris,555-0130
+STU016,Lauren,Clark,lauren.clark@smartcampus.edu,4,2021-01-14,ACTIVE,4,3.75,108,555-0131,279 Magnolia Dr,Richard Clark,555-0132
+STU017,Brandon,Lewis,brandon.lewis@smartcampus.edu,2,2024-08-18,ACTIVE,1,3.85,15,555-0133,391 Dogwood St,Michelle Lewis,555-0134
+STU018,Stephanie,Robinson,steph.robinson@smartcampus.edu,3,2022-01-20,ACTIVE,3,3.30,75,555-0135,684 Redwood Ln,Steven Robinson,555-0136
+STU019,Justin,Walker,justin.walker@smartcampus.edu,1,2023-01-16,ACTIVE,2,3.95,42,555-0137,527 Cypress Ave,Karen Walker,555-0138
+STU020,Nicole,Hall,nicole.hall@smartcampus.edu,4,2021-08-19,GRADUATED,4,3.65,120,555-0139,840 Sequoia Dr,Brian Hall,555-0140
+STU021,Kevin,Allen,kevin.allen@smartcampus.edu,2,2024-01-12,ACTIVE,1,3.40,12,555-0141,162 Fir St,Linda Allen,555-0142
+STU022,Rachel,Young,rachel.young@smartcampus.edu,3,2022-08-17,ACTIVE,3,3.70,81,555-0143,795 Juniper Ln,Gary Young,555-0144
+STU023,Tyler,King,tyler.king@smartcampus.edu,1,2023-08-22,ACTIVE,2,3.15,39,555-0145,428 Hemlock Ave,Carol King,555-0146
+STU024,Brittany,Wright,brit.wright@smartcampus.edu,4,2021-01-11,ACTIVE,4,3.85,102,555-0147,671 Mahogany Dr,Paul Wright,555-0148
+STU025,Jonathan,Lopez,jon.lopez@smartcampus.edu,2,2024-08-15,ACTIVE,1,3.60,18,555-0149,314 Walnut St,Sandra Lopez,555-0150

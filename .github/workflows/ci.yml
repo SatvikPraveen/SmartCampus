@@ -1,0 +1,534 @@
+# Location: .github/workflows/ci.yml
+# SmartCampus Continuous Integration Pipeline
+# This workflow handles building, testing, and quality checks
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run nightly builds at 2 AM UTC
+    - cron: "0 2 * * *"
+
+env:
+  JAVA_VERSION: "17"
+  MAVEN_OPTS: -Xmx2g
+  DOCKER_IMAGE: smartcampus
+  REGISTRY: ghcr.io
+
+jobs:
+  # Job 1: Code Quality and Security Checks
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for SonarCloud
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-
+
+      - name: Run Checkstyle
+        run: mvn checkstyle:check
+
+      - name: Run SpotBugs
+        run: mvn spotbugs:check
+
+      - name: Run PMD
+        run: mvn pmd:check
+
+      - name: OWASP Dependency Check
+        run: mvn org.owasp:dependency-check-maven:check
+
+      - name: Upload OWASP results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owasp-reports
+          path: target/dependency-check-report.html
+
+      - name: SonarCloud Scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=smartcampus \
+            -Dsonar.organization=your-org \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        if: env.SONAR_TOKEN != null
+
+  # Job 2: Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [17, 21]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Run unit tests
+        run: mvn test -Dtest="**/*Test.java" -DexcludedGroups="integration,functional"
+
+      - name: Generate test report
+        run: mvn surefire-report:report
+        if: always()
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results-java-${{ matrix.java }}
+          path: |
+            target/surefire-reports/
+            target/site/surefire-report.html
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Unit Tests (Java ${{ matrix.java }})
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: true
+
+  # Job 3: Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_DB: smartcampus_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:6-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U test_user; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Run integration tests
+        run: mvn test -Dtest="**/*IntegrationTest.java,**/*IT.java" -Dspring.profiles.active=test
+        env:
+          DATABASE_URL: jdbc:postgresql://localhost:5432/smartcampus_test
+          DATABASE_USERNAME: test_user
+          DATABASE_PASSWORD: test_password
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+
+  # Job 4: Build Application
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests]
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact-name: ${{ steps.version.outputs.artifact-name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Extract version information
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            VERSION=${VERSION%-SNAPSHOT}
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            VERSION="${VERSION%-SNAPSHOT}-dev.$(git rev-parse --short HEAD)"
+          else
+            VERSION="${VERSION%-SNAPSHOT}-pr.$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "artifact-name=smartcampus-$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Build application
+        run: |
+          mvn clean package -DskipTests \
+            -Dbuild.version=${{ steps.version.outputs.version }} \
+            -Dbuild.time=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+            -Dgit.commit=$(git rev-parse HEAD) \
+            -Dgit.branch=$(git rev-parse --abbrev-ref HEAD)
+
+      - name: Generate build info
+        run: |
+          cat > target/build-info.json << EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "buildTime": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "gitCommit": "$(git rev-parse HEAD)",
+            "gitBranch": "$(git rev-parse --abbrev-ref HEAD)",
+            "buildNumber": "${{ github.run_number }}",
+            "buildUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact-name }}
+          path: |
+            target/*.jar
+            target/build-info.json
+            target/classes/
+          retention-days: 30
+
+      - name: Upload JAR for Docker build
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-artifact
+          path: target/*.jar
+          retention-days: 1
+
+  # Job 5: Generate Documentation
+  documentation:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Generate JavaDoc
+        run: mvn javadoc:javadoc
+
+      - name: Generate site documentation
+        run: mvn site
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: |
+            target/site/
+            target/apidocs/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: target/site
+          destination_dir: docs
+
+  # Job 6: Build Docker Image
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [build, integration-tests]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jar-artifact
+          path: target/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{branch}}-{{sha}},enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE }}:latest
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  # Job 7: Security Scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE }}:latest
+          format: "sarif"
+          output: "trivy-results.sarif"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE }}:latest
+          args: --severity-threshold=high
+        if: env.SNYK_TOKEN != null
+
+  # Job 8: Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+
+      - name: Start application with Docker
+        run: |
+          docker run -d --name smartcampus-perf \
+            -p 8080:8080 \
+            -e SPRING_PROFILES_ACTIVE=test \
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE }}:latest
+
+      - name: Wait for application startup
+        run: |
+          timeout 60s bash -c 'until curl -f http://localhost:8080/actuator/health; do sleep 5; done'
+
+      - name: Run JMeter performance tests
+        run: |
+          wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.5.tgz
+          tar -xzf apache-jmeter-5.5.tgz
+          ./apache-jmeter-5.5/bin/jmeter.sh -n -t src/test/jmeter/load-test.jmx \
+            -l results.jtl -e -o performance-report/
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-results
+          path: |
+            results.jtl
+            performance-report/
+
+      - name: Stop application
+        run: docker stop smartcampus-perf
+        if: always()
+
+  # Job 9: Dependency Updates
+  dependency-update:
+    name: Check Dependency Updates
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: maven
+
+      - name: Check for dependency updates
+        run: mvn versions:display-dependency-updates versions:display-plugin-updates
+
+      - name: Update dependencies
+        run: |
+          mvn versions:use-latest-versions
+          mvn versions:update-properties
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update dependencies"
+          title: "Automated Dependency Updates"
+          body: |
+            This PR contains automated dependency updates.
+
+            Please review the changes carefully before merging.
+          branch: dependency-updates
+          delete-branch: true
+
+  # Job 10: Notification
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, integration-tests, build, docker-build]
+    if: always()
+
+    steps:
+      - name: Notify Slack on Success
+        uses: 8398a7/action-slack@v3
+        if: success()
+        with:
+          status: success
+          channel: "#ci-cd"
+          message: |
+            ✅ SmartCampus CI Pipeline Successful!
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Workflow: ${{ github.workflow }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Slack on Failure
+        uses: 8398a7/action-slack@v3
+        if: failure()
+        with:
+          status: failure
+          channel: "#ci-cd"
+          message: |
+            ❌ SmartCampus CI Pipeline Failed!
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Workflow: ${{ github.workflow }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        if: failure() && github.ref == 'refs/heads/main'
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "SmartCampus CI Pipeline Failed - ${{ github.ref_name }}"
+          body: |
+            The SmartCampus CI pipeline has failed on the main branch.
+
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Please investigate and fix the issues.
+          to: developers@smartcampus.edu

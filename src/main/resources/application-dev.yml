@@ -1,0 +1,266 @@
+# Location: src/main/resources/application-dev.yml
+# SmartCampus Backend - Development Environment Configuration
+# This configuration is optimized for local development
+
+# Server Configuration for Development
+server:
+  port: 8080
+  error:
+    include-stacktrace: always
+    include-message: always
+    include-binding-errors: always
+
+# Spring Configuration for Development
+spring:
+  # Development Datasource (can use H2 for quick setup)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:smartcampus}
+    username: ${DB_USERNAME:smartcampus}
+    password: ${DB_PASSWORD:smartcampus123}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
+
+  # JPA Development Settings
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        generate_statistics: true
+        cache:
+          use_second_level_cache: false
+          use_query_cache: false
+
+  # H2 Console (if using H2 for development)
+  h2:
+    console:
+      enabled: false # Set to true if using H2
+      path: /h2-console
+      settings:
+        web-allow-others: true
+
+  # Development Mail Configuration (using MailHog)
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail:
+        debug: true
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+  # Redis for Development
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 1000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+
+  # DevTools Configuration
+  devtools:
+    restart:
+      enabled: true
+      additional-paths:
+        - src/main/java
+        - src/main/resources
+      exclude: static/**,public/**,templates/**
+      poll-interval: 1000ms
+      quiet-period: 400ms
+    livereload:
+      enabled: true
+      port: 35729
+
+  # Development Web Configuration
+  web:
+    resources:
+      cache:
+        period: 0
+        cachecontrol:
+          no-cache: true
+          no-store: true
+
+# JWT Configuration for Development
+jwt:
+  secret: ${JWT_SECRET:dev-jwt-secret-key-not-for-production}
+  expiration: ${JWT_EXPIRATION:3600000} # 1 hour for development
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:86400000} # 24 hours for development
+
+# Development-specific SmartCampus Configuration
+smartcampus:
+  auth:
+    max-login-attempts: 10 # More lenient for development
+    account-lockout-duration: 300000 # 5 minutes
+  
+  features:
+    user-registration: true
+    password-reset: true
+    email-verification: false # Disabled for easier development
+    audit-logging: true
+    caching: true
+
+# Actuator Configuration for Development
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*" # Expose all endpoints for development
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    configprops:
+      show-values: always
+    env:
+      show-values: always
+
+# Development Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.smartcampus: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.cache: DEBUG
+    org.springframework.transaction: DEBUG
+    org.springframework.data.jpa: DEBUG
+    org.flywaydb: DEBUG
+    com.zaxxer.hikari: DEBUG
+    org.springframework.boot.autoconfigure: INFO
+    org.springframework.web.servlet.DispatcherServlet: DEBUG
+  pattern:
+    console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %clr([%X{traceId:-},%X{spanId:-}]){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"
+
+# CORS Configuration for Development
+app:
+  cors:
+    allowed-origins: 
+      - http://localhost:3000
+      - http://localhost:3001
+      - http://localhost:4200
+      - http://localhost:8080
+      - http://127.0.0.1:3000
+      - http://127.0.0.1:8080
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
+
+# Development-specific OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tryItOutEnabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+    displayRequestDuration: true
+    showExtensions: true
+    showCommonExtensions: true
+    defaultModelsExpandDepth: 2
+    defaultModelExpandDepth: 2
+    displayOperationId: true
+    docExpansion: none
+  show-actuator: true
+
+# Development File Upload Configuration
+file:
+  upload:
+    dir: ${FILE_UPLOAD_DIR:./uploads/dev}
+    max-size: ${FILE_MAX_SIZE:50MB} # Larger limit for development
+
+# Development Performance Settings
+spring.jpa.properties.hibernate.jdbc.batch_size: 5 # Smaller for easier debugging
+spring.jpa.properties.hibernate.order_inserts: true
+spring.jpa.properties.hibernate.order_updates: true
+
+# Development Cache Configuration
+spring:
+  cache:
+    redis:
+      time-to-live: 300000 # 5 minutes for development (shorter for testing)
+
+# Development Database Configuration
+---
+# Alternative H2 configuration for quick local development
+spring:
+  config:
+    activate:
+      on-profile: dev-h2
+  datasource:
+    url: jdbc:h2:mem:smartcampus;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+  flyway:
+    enabled: false # Disable Flyway for H2 in-memory database
+
+# Development Test Data Configuration
+---
+spring:
+  config:
+    activate:
+      on-profile: dev-testdata
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data-dev.sql
+      schema-locations: classpath:schema-dev.sql
+      continue-on-error: false
+
+# Development Security Configuration
+---
+spring:
+  config:
+    activate:
+      on-profile: dev-nosecurity
+  autoconfigure:
+    exclude: 
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
+# Development with External Services Disabled
+---
+spring:
+  config:
+    activate:
+      on-profile: dev-offline
+  mail:
+    host: localhost
+    port: 3025 # Fake SMTP for offline development
+smartcampus:
+  notifications:
+    email:
+      enabled: false
+    push:
+      enabled: false
+    sms:
+      enabled: false
+  features:
+    email-verification: false
+    password-reset: false

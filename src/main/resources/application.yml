@@ -1,0 +1,371 @@
+# Location: src/main/resources/application.yml
+# SmartCampus Backend - Main Application Configuration
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
+    min-response-size: 1024
+  http2:
+    enabled: true
+  error:
+    whitelabel:
+      enabled: false
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param
+    include-exception: false
+
+# Spring Configuration
+spring:
+  application:
+    name: smartcampus-backend
+    version: @project.version@
+  
+  # Profile Configuration
+  profiles:
+    active: dev
+  
+  # Datasource Configuration
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:smartcampus}
+    username: ${DB_USERNAME:smartcampus}
+    password: ${DB_PASSWORD:smartcampus123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: SmartCampusHikariPool
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.SnakeCasePhysicalNamingStrategy
+        implicit-strategy: org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: false
+        jdbc:
+          batch_size: 20
+          order_inserts: true
+          order_updates: true
+        cache:
+          use_second_level_cache: true
+          use_query_cache: true
+          region:
+            factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
+        enable_lazy_load_no_trans: false
+        temp:
+          use_jdbc_metadata_defaults: false
+    show-sql: false
+    open-in-view: false
+  
+  # Flyway Configuration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    locations: classpath:db/migration
+    baseline-version: 1
+    table: flyway_schema_history
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+        shutdown-timeout: 100ms
+  
+  # Cache Configuration
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000 # 1 hour
+      cache-null-values: false
+      use-key-prefix: true
+      key-prefix: smartcampus:
+  
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      indent-output: false
+    deserialization:
+      fail-on-unknown-properties: false
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: non_null
+    time-zone: UTC
+  
+  # Mail Configuration
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+          ssl:
+            enable: false
+        transport:
+          protocol: smtp
+        debug: false
+    default-encoding: UTF-8
+  
+  # Servlet Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+      file-size-threshold: 2KB
+      resolve-lazily: false
+  
+  # Security Configuration
+  security:
+    user:
+      password: # Disable default user
+  
+  # Web Configuration
+  web:
+    resources:
+      add-mappings: true
+      cache:
+        cachecontrol:
+          max-age: 3600
+          cache-public: true
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:smartcampus-jwt-secret-key-change-in-production}
+  expiration: ${JWT_EXPIRATION:86400000} # 24 hours
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days
+  issuer: smartcampus-backend
+  clock-skew: 300 # 5 minutes
+
+# File Upload Configuration
+file:
+  upload:
+    dir: ${FILE_UPLOAD_DIR:./uploads}
+    max-size: ${FILE_MAX_SIZE:10MB}
+    allowed-types: 
+      - image/jpeg
+      - image/png
+      - image/gif
+      - application/pdf
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.ms-excel
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+# SmartCampus Specific Configuration
+smartcampus:
+  app:
+    name: SmartCampus Backend
+    description: Smart Campus Management System
+    version: @project.version@
+    timezone: UTC
+    default-locale: en_US
+  
+  # Authentication Configuration
+  auth:
+    password-policy:
+      min-length: 8
+      require-uppercase: true
+      require-lowercase: true
+      require-digit: true
+      require-special-char: false
+    max-login-attempts: 5
+    account-lockout-duration: 900000 # 15 minutes
+    session-timeout: 1800000 # 30 minutes
+  
+  # Pagination Configuration
+  pagination:
+    default-page-size: 20
+    max-page-size: 100
+  
+  # Notification Configuration
+  notifications:
+    email:
+      enabled: true
+      from: noreply@smartcampus.com
+      from-name: SmartCampus System
+    push:
+      enabled: false
+    sms:
+      enabled: false
+  
+  # Features Configuration
+  features:
+    user-registration: true
+    password-reset: true
+    email-verification: true
+    two-factor-auth: false
+    audit-logging: true
+    advanced-search: true
+    file-upload: true
+    caching: true
+    analytics: true
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,configprops,beans,mappings,flyway,caches
+      base-path: /actuator
+      path-mapping:
+        health: health
+        info: info
+        metrics: metrics
+        prometheus: prometheus
+    enabled-by-default: true
+  endpoint:
+    health:
+      show-details: when_authorized
+      show-components: when_authorized
+      roles: ADMIN
+      probes:
+        enabled: true
+    info:
+      enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    ratelimiters:
+      enabled: true
+    mail:
+      enabled: true
+    redis:
+      enabled: true
+    db:
+      enabled: true
+    diskspace:
+      enabled: true
+      threshold: 10GB
+  info:
+    env:
+      enabled: true
+    java:
+      enabled: true
+    git:
+      enabled: true
+      mode: full
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 60s
+        descriptions: true
+      simple:
+        enabled: false
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,200ms,400ms,500ms,1s,2s,5s
+    tags:
+      application: smartcampus-backend
+      environment: ${spring.profiles.active:dev}
+    web:
+      server:
+        request:
+          autotime:
+            enabled: true
+
+# OpenAPI Documentation
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+    tryItOutEnabled: true
+    displayRequestDuration: true
+    showExtensions: true
+    showCommonExtensions: true
+    defaultModelsExpandDepth: 1
+    defaultModelExpandDepth: 1
+    displayOperationId: false
+  show-actuator: false
+  group-configs:
+    - group: 'public'
+      display-name: 'Public API'
+      paths-to-match: '/api/public/**'
+    - group: 'auth'
+      display-name: 'Authentication API'
+      paths-to-match: '/api/auth/**'
+    - group: 'admin'
+      display-name: 'Admin API'
+      paths-to-match: '/api/admin/**'
+    - group: 'user'
+      display-name: 'User API'
+      paths-to-match: '/api/users/**'
+
+# Logging Configuration
+logging:
+  level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    com.smartcampus: ${LOGGING_LEVEL_COM_SMARTCAMPUS:INFO}
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type: WARN
+    org.springframework.cache: INFO
+    org.flywaydb: INFO
+    com.zaxxer.hikari: INFO
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- [%t] %-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"
+  file:
+    name: ${LOGGING_FILE_NAME:logs/smartcampus.log}
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+      total-size-cap: 3GB
+      clean-history-on-start: true
+
+# Custom Application Properties
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
