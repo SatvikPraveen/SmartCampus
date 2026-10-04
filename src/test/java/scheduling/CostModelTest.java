@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import scheduling.eval.CostBreakdown;
 import scheduling.eval.CostModel;
 import scheduling.model.Event;
+import scheduling.model.Precedence;
 import scheduling.model.Room;
 import scheduling.model.TimetablingProblem;
 
@@ -74,5 +76,46 @@ class CostModelTest {
         CostBreakdown a = new CostBreakdown(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         CostBreakdown b = new CostBreakdown(0, 0, 0, 0, 0, 0, 0, 0, 900, 0, 0);
         assertTrue(a.weighted(1_000_000) > b.weighted(1_000_000));
+    }
+
+    /**
+     * Three single-student events on one day of three periods. {@code a} needs a lab and may only
+     * use slots 0-1, {@code c} may only use slot 2, and a &lt; b &lt; c must hold in slot order.
+     */
+    private static TimetablingProblem sideConstrained() {
+        return new TimetablingProblem(
+                List.of(new Event("a", null, Set.of("s1"), Set.of("lab")),
+                        new Event("b", null, Set.of("s2")),
+                        new Event("c", null, Set.of("s3"))),
+                List.of(new Room("plain", 5), new Room("lab", 5, Set.of("lab"))),
+                1, 3,
+                Map.of("a", Set.of(0, 1), "c", Set.of(2)),
+                List.of(new Precedence("a", "b"), new Precedence("b", "c")));
+    }
+
+    @Test
+    void detectsFeatureAvailabilityAndPrecedenceViolations() {
+        TimetablingProblem p = sideConstrained();
+        // a: slot 2, plain room -> missing feature and unavailable slot.
+        // b: slot 1, lab room   -> fine (b needs no feature).
+        // c: slot 0             -> unavailable slot. Both precedences are reversed.
+        CostBreakdown c = CostModel.evaluate(p, new int[] {2, 1, 0}, new int[] {0, 1, 0});
+        assertEquals(1, c.featureViolations());
+        assertEquals(2, c.unavailableSlots());
+        assertEquals(2, c.precedenceViolations());
+        assertEquals(5, c.hard());
+        assertEquals(new CostBreakdown(0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 3), c);
+    }
+
+    @Test
+    void sideConstraintsAreSatisfiableAndPrecedenceIsStrict() {
+        TimetablingProblem p = sideConstrained();
+        assertTrue(CostModel.evaluate(p, new int[] {0, 1, 2}, new int[] {1, 0, 0}).feasible());
+        // Same slot does not satisfy "before".
+        assertEquals(1, CostModel.evaluate(p, new int[] {1, 1, 2}, new int[] {1, 0, 0}).precedenceViolations());
+        // A precedence with an unassigned endpoint is not counted.
+        CostBreakdown partial = CostModel.evaluate(p, new int[] {1, U, 0}, new int[] {1, U, 0});
+        assertEquals(0, partial.precedenceViolations());
+        assertEquals(1, partial.unassigned());
     }
 }
