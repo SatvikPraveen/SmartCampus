@@ -363,7 +363,33 @@ public class UniversityFactory {
                     courses.add(createAdvancedCourse("Research Methods", department, mainProfessor));
             }
             
+            ensureUniqueCourseCodes(courses);
             return courses;
+        }
+
+        /**
+         * Course codes double as course IDs, so a curriculum must not contain two courses with the
+         * same code (e.g. two introductory "XX101" courses or two randomly numbered advanced courses).
+         * Colliding codes are renumbered to the next free number, keeping prefix and suffix.
+         */
+        private static void ensureUniqueCourseCodes(List<Course> courses) {
+            Set<String> used = new HashSet<>();
+            for (Course course : courses) {
+                String code = course.getCourseCode();
+                if (!used.add(code)) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\D*)(\\d+)(\\D*)$").matcher(code);
+                    if (!m.matches()) {
+                        throw new IllegalStateException("Cannot renumber course code: " + code);
+                    }
+                    int number = Integer.parseInt(m.group(2));
+                    do {
+                        number++;
+                        code = m.group(1) + number + m.group(3);
+                    } while (!used.add(code));
+                    course.setCourseCode(code);
+                    course.setCourseId(code);
+                }
+            }
         }
         
         private static List<Course> createComputerScienceCurriculum(Department department, List<Professor> professors) {
