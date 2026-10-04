@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
 /**
@@ -26,6 +27,23 @@ public class ConfigManager {
     
     // Configuration change listeners
     private static final Map<String, List<ConfigChangeListener>> listeners = new ConcurrentHashMap<>();
+    
+    // Directory against which configuration file names are resolved (default: ./config)
+    private static volatile Path configDirectory = Paths.get(DEFAULT_CONFIG_DIR);
+    
+    /**
+     * Set the directory against which configuration file names are resolved
+     */
+    public static void setConfigDirectory(Path directory) {
+        configDirectory = Objects.requireNonNull(directory, "directory");
+    }
+    
+    /**
+     * Get the directory against which configuration file names are resolved
+     */
+    public static Path getConfigDirectory() {
+        return configDirectory;
+    }
     
     /**
      * Load application configuration
@@ -52,7 +70,7 @@ public class ConfigManager {
      * Load configuration from specified file
      */
     public static Properties loadConfig(String configFileName) throws IOException {
-        Path configPath = Paths.get(DEFAULT_CONFIG_DIR, configFileName);
+        Path configPath = configDirectory.resolve(configFileName);
         return loadConfig(configPath);
     }
     
@@ -85,7 +103,7 @@ public class ConfigManager {
             notifyConfigChange(key, properties);
         }
         
-        return new Properties(configCache.get(key)); // Return copy to prevent modification
+        return copyOf(configCache.get(key)); // Return copy to prevent modification
     }
     
     /**
@@ -100,11 +118,23 @@ public class ConfigManager {
         
         // Update cache
         String key = configPath.toString();
-        configCache.put(key, new Properties(properties));
+        configCache.put(key, copyOf(properties));
         lastModified.put(key, Files.getLastModifiedTime(configPath).toMillis());
         
         // Notify listeners
         notifyConfigChange(key, properties);
+    }
+    
+    /**
+     * Create a flat copy of the given properties (including any defaults chain), so that the copy is
+     * independent of the source and its entries are visible to putAll/keySet/store.
+     */
+    private static Properties copyOf(Properties source) {
+        Properties copy = new Properties();
+        for (String name : source.stringPropertyNames()) {
+            copy.setProperty(name, source.getProperty(name));
+        }
+        return copy;
     }
     
     /**
@@ -156,7 +186,7 @@ public class ConfigManager {
      * Set configuration value
      */
     public static void setConfigValue(String configFileName, String key, String value) throws IOException {
-        Path configPath = Paths.get(DEFAULT_CONFIG_DIR, configFileName);
+        Path configPath = configDirectory.resolve(configFileName);
         Properties properties = loadConfig(configPath);
         properties.setProperty(key, value);
         saveConfig(properties, configPath);
@@ -470,7 +500,7 @@ public class ConfigManager {
      * Add configuration change listener
      */
     public static void addConfigChangeListener(String configPath, ConfigChangeListener listener) {
-        listeners.computeIfAbsent(configPath, k -> new ArrayList<>()).add(listener);
+        listeners.computeIfAbsent(configPath, k -> new CopyOnWriteArrayList<>()).add(listener);
     }
     
     /**
