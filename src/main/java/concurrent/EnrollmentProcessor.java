@@ -107,12 +107,18 @@ public class EnrollmentProcessor {
             }
             
             // Process enrollment
-            boolean success = enrollmentService.enrollStudent(student, course);
+            boolean success = enrollmentService.enrollStudent(student.getStudentId(), course.getCourseId(),
+                                                            course.getSemester(), course.getYear());
             
             if (success) {
                 // Send notification asynchronously
                 CompletableFuture.runAsync(() -> 
-                    notificationService.sendEnrollmentConfirmation(student, course),
+                    notificationService.sendNotification(
+                        student.getUserId(),
+                        NotificationService.NotificationType.ACADEMIC,
+                        "Enrollment Confirmed",
+                        "You have been enrolled in " + course.getCourseCode() + " - " + course.getCourseName(),
+                        NotificationService.Priority.NORMAL),
                     executorService);
                 
                 return new EnrollmentResult(true, "Enrollment successful", 
@@ -268,11 +274,11 @@ public class EnrollmentProcessor {
     // Helper methods
     
     private boolean hasAvailableCapacity(Course course) {
-        return course.getEnrolledStudents() < course.getCapacity();
+        return course.getEnrolledStudentIds().size() < course.getMaxEnrollment();
     }
     
     private boolean isStudentEnrolled(Student student, Course course) {
-        return enrollmentService.isStudentEnrolled(student, course);
+        return enrollmentService.isStudentEnrolled(student.getStudentId(), course.getCourseId());
     }
     
     // Inner classes
@@ -324,7 +330,7 @@ public class EnrollmentProcessor {
         @Override
         public String toString() {
             return String.format("EnrollmentResult{success=%s, message='%s', student=%s, course=%s}",
-                               success, message, student.getName(), course.getName());
+                               success, message, student.getFullName(), course.getCourseName());
         }
     }
     

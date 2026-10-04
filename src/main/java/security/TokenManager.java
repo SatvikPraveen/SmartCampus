@@ -67,8 +67,8 @@ public class TokenManager {
         // Create token payload
         TokenPayload payload = new TokenPayload(
             tokenId,
-            user.getUsername(),
-            user.getRole(),
+            user.getUserId(),
+            RoleBasedAccess.resolveRole(user),
             sessionId,
             issuer,
             now,
@@ -80,7 +80,7 @@ public class TokenManager {
         String token = createTokenString(payload);
         
         // Store token info
-        TokenInfo tokenInfo = new TokenInfo(tokenId, user.getUsername(), sessionId, 
+        TokenInfo tokenInfo = new TokenInfo(tokenId, user.getUserId(), sessionId, 
                                           tokenType, now, expiresAt, token);
         activeTokens.put(tokenId, tokenInfo);
         

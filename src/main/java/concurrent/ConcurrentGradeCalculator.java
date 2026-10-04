@@ -3,29 +3,34 @@
 package concurrent;
 
 import models.*;
-import repositories.GradeRepository;
+import repositories.CourseRepository;
 import repositories.EnrollmentRepository;
+import repositories.StudentRepository;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.DoubleAdder;
-import java.util.function.Function;
+import java.util.function.DoublePredicate;
 import java.util.stream.Collectors;
 
 /**
  * Handles parallel processing of grade calculations
  * Provides efficient computation of grades, GPAs, and statistical analysis
+ * based on the final grades recorded on enrollments
  */
 public class ConcurrentGradeCalculator {
     
-    private final GradeRepository gradeRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final StudentRepository studentRepository;
+    private final CourseRepository courseRepository;
     private final ForkJoinPool forkJoinPool;
     private final ExecutorService executorService;
     
-    public ConcurrentGradeCalculator(GradeRepository gradeRepository,
-                                   EnrollmentRepository enrollmentRepository) {
-        this.gradeRepository = gradeRepository;
+    public ConcurrentGradeCalculator(EnrollmentRepository enrollmentRepository,
+                                   StudentRepository studentRepository,
+                                   CourseRepository courseRepository) {
         this.enrollmentRepository = enrollmentRepository;
+        this.studentRepository = studentRepository;
+        this.courseRepository = courseRepository;
         this.forkJoinPool = new ForkJoinPool();
         this.executorService = Executors.newWorkStealingPool();
     }
@@ -35,19 +40,23 @@ public class ConcurrentGradeCalculator {
      */
     public CompletableFuture<GPAResult> calculateStudentGPAAsync(Student student) {
         return CompletableFuture.supplyAsync(() -> {
-            List<Grade> grades = gradeRepository.findByStudent(student);
+            List<Enrollment> grades = graded(enrollmentRepository.findByStudent(student));
             
             if (grades.isEmpty()) {
                 return new GPAResult(student, 0.0, 0, Collections.emptyMap());
             }
             
+            List<Enrollment> gpaGrades = grades.parallelStream()
+                .filter(Enrollment::countsTowardGpa)
+                .collect(Collectors.toList());
+            
             // Calculate GPA using parallel processing
-            double totalGradePoints = grades.parallelStream()
-                .mapToDouble(this::calculateGradePoints)
+            double totalGradePoints = gpaGrades.parallelStream()
+                .mapToDouble(Enrollment::getGpaPoints)
                 .sum();
             
-            int totalCredits = grades.parallelStream()
-                .mapToInt(grade -> grade.getCourse().getCredits())
+            int totalCredits = gpaGrades.parallelStream()
+                .mapToInt(Enrollment::getCreditHours)
                 .sum();
             
             double gpa = totalCredits > 0 ? totalGradePoints / totalCredits : 0.0;
@@ -55,7 +64,7 @@ public class ConcurrentGradeCalculator {
             // Calculate grade distribution
             Map<String, Integer> gradeDistribution = grades.parallelStream()
                 .collect(Collectors.groupingBy(
-                    Grade::getLetterGrade,
+                    ConcurrentGradeCalculator::letterOf,
                     Collectors.summingInt(grade -> 1)
                 ));
             
@@ -86,7 +95,7 @@ public class ConcurrentGradeCalculator {
             Course course) {
         
         return CompletableFuture.supplyAsync(() -> {
-            List<Grade> grades = gradeRepository.findByCourse(course);
+            List<Enrollment> grades = graded(enrollmentRepository.findByCourse(course));
             
             if (grades.isEmpty()) {
                 return new CourseStatistics(course, 0, 0.0, 0.0, 0.0, 
@@ -95,13 +104,13 @@ public class ConcurrentGradeCalculator {
             
             // Use parallel streams for statistical calculations
             DoubleSummaryStatistics stats = grades.parallelStream()
-                .mapToDouble(Grade::getNumericGrade)
+                .mapToDouble(Enrollment::getNumericGrade)
                 .summaryStatistics();
             
             // Calculate grade distribution
             Map<String, Long> gradeDistribution = grades.parallelStream()
                 .collect(Collectors.groupingBy(
-                    Grade::getLetterGrade,
+                    ConcurrentGradeCalculator::letterOf,
                     Collectors.counting()
                 ));
             
@@ -123,7 +132,7 @@ public class ConcurrentGradeCalculator {
             Department department) {
         
         return CompletableFuture.supplyAsync(() -> {
-            List<Grade> allGrades = gradeRepository.findByDepartment(department);
+            List<Enrollment> allGrades = graded(enrollmentRepository.findByDepartment(department));
             
             if (allGrades.isEmpty()) {
                 return new DepartmentStatistics(department, Collections.emptyMap(),
@@ -135,9 +144,14 @@ public class ConcurrentGradeCalculator {
                 allGrades, 0, allGrades.size());
             DepartmentStatisticsResult result = forkJoinPool.invoke(task);
             
+            Map<Course, Double> courseAverages = new HashMap<>();
+            result.getCourseAverages().forEach((courseId, average) ->
+                courseRepository.findById(courseId)
+                    .ifPresent(course -> courseAverages.put(course, average)));
+            
             return new DepartmentStatistics(
                 department,
-                result.getCourseAverages(),
+                courseAverages,
                 result.getOverallAverage(),
                 result.getGradeDistribution()
             );
@@ -151,8 +165,7 @@ public class ConcurrentGradeCalculator {
             String semester, String academicYear) {
         
         return CompletableFuture.supplyAsync(() -> {
-            List<Grade> semesterGrades = gradeRepository.findBySemesterAndYear(
-                semester, academicYear);
+            List<Enrollment> semesterGrades = findSemesterGrades(semester, academicYear);
             
             if (semesterGrades.isEmpty()) {
                 return new SemesterStatistics(semester, academicYear, 0, 0.0,
@@ -160,22 +173,32 @@ public class ConcurrentGradeCalculator {
             }
             
             // Parallel processing of semester data
-            int totalStudents = semesterGrades.parallelStream()
-                .collect(Collectors.toSet())
-                .size();
+            int totalStudents = (int) semesterGrades.parallelStream()
+                .map(Enrollment::getStudentId)
+                .distinct()
+                .count();
             
             double averageGrade = semesterGrades.parallelStream()
-                .mapToDouble(Grade::getNumericGrade)
+                .mapToDouble(Enrollment::getNumericGrade)
                 .average()
                 .orElse(0.0);
             
-            // Grade distribution by department
-            Map<Department, Map<String, Long>> departmentDistribution = 
+            // Grade distribution by department (keyed by department ID)
+            Map<String, String> courseDepartments = new ConcurrentHashMap<>();
+            semesterGrades.stream()
+                .map(Enrollment::getCourseId)
+                .distinct()
+                .forEach(courseId -> courseRepository.findById(courseId)
+                    .map(Course::getDepartmentId)
+                    .ifPresent(departmentId -> courseDepartments.put(courseId, departmentId)));
+            
+            Map<String, Map<String, Long>> departmentDistribution = 
                 semesterGrades.parallelStream()
+                    .filter(grade -> courseDepartments.containsKey(grade.getCourseId()))
                     .collect(Collectors.groupingBy(
-                        grade -> grade.getCourse().getDepartment(),
+                        grade -> courseDepartments.get(grade.getCourseId()),
                         Collectors.groupingBy(
-                            Grade::getLetterGrade,
+                            ConcurrentGradeCalculator::letterOf,
                             Collectors.counting()
                         )
                     ));
@@ -183,7 +206,7 @@ public class ConcurrentGradeCalculator {
             // Overall grade distribution
             Map<String, Long> overallDistribution = semesterGrades.parallelStream()
                 .collect(Collectors.groupingBy(
-                    Grade::getLetterGrade,
+                    ConcurrentGradeCalculator::letterOf,
                     Collectors.counting()
                 ));
             
@@ -206,15 +229,34 @@ public class ConcurrentGradeCalculator {
         
         return CompletableFuture.supplyAsync(() -> {
             // Get historical grade data
-            List<Grade> historicalGrades = gradeRepository.findByDepartmentRecent(
-                department, numberOfSemesters);
+            List<Enrollment> historicalGrades = graded(enrollmentRepository.findByDepartment(department));
             
-            // Group by semester and calculate averages
-            Map<String, Double> semesterAverages = historicalGrades.parallelStream()
+            // Group by semester (chronologically) and calculate averages
+            Map<String, List<Enrollment>> bySemester = historicalGrades.stream()
                 .collect(Collectors.groupingBy(
-                    grade -> grade.getSemester() + " " + grade.getAcademicYear(),
-                    Collectors.averagingDouble(Grade::getNumericGrade)
+                    grade -> grade.getSemester() + " " + grade.getYear(),
+                    TreeMap::new,
+                    Collectors.toList()
                 ));
+            
+            List<String> orderedTerms = bySemester.entrySet().stream()
+                .sorted(Comparator.comparing(
+                    (Map.Entry<String, List<Enrollment>> entry) -> entry.getValue().get(0),
+                    Comparator.comparingInt(Enrollment::getYear)
+                              .thenComparingInt(grade -> termOrder(grade.getSemester()))))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+            
+            List<String> recentTerms = orderedTerms.subList(
+                Math.max(0, orderedTerms.size() - numberOfSemesters), orderedTerms.size());
+            
+            Map<String, Double> semesterAverages = new LinkedHashMap<>();
+            for (String term : recentTerms) {
+                semesterAverages.put(term, bySemester.get(term).parallelStream()
+                    .mapToDouble(Enrollment::getNumericGrade)
+                    .average()
+                    .orElse(0.0));
+            }
             
             // Calculate trend statistics
             List<Double> averages = new ArrayList<>(semesterAverages.values());
@@ -231,20 +273,13 @@ public class ConcurrentGradeCalculator {
             double threshold) {
         
         return CompletableFuture.supplyAsync(() -> {
-            List<Grade> allGrades = gradeRepository.findAll();
+            List<Enrollment> allGrades = graded(enrollmentRepository.findAll());
             
             // Group grades by student and calculate GPAs in parallel
-            Map<Student, List<Grade>> studentGrades = allGrades.parallelStream()
-                .collect(Collectors.groupingBy(Grade::getStudent));
+            Map<String, List<Enrollment>> studentGrades = allGrades.parallelStream()
+                .collect(Collectors.groupingBy(Enrollment::getStudentId));
             
-            return studentGrades.entrySet().parallelStream()
-                .filter(entry -> {
-                    List<Grade> grades = entry.getValue();
-                    double gpa = calculateGPA(grades);
-                    return gpa < threshold;
-                })
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toList());
+            return studentsMatching(studentGrades, gpa -> gpa < threshold);
         }, executorService);
     }
     
@@ -255,56 +290,65 @@ public class ConcurrentGradeCalculator {
             double minGPA, String semester, String academicYear) {
         
         return CompletableFuture.supplyAsync(() -> {
-            List<Grade> semesterGrades = gradeRepository.findBySemesterAndYear(
-                semester, academicYear);
+            List<Enrollment> semesterGrades = findSemesterGrades(semester, academicYear);
             
-            Map<Student, List<Grade>> studentGrades = semesterGrades.parallelStream()
-                .collect(Collectors.groupingBy(Grade::getStudent));
+            Map<String, List<Enrollment>> studentGrades = semesterGrades.parallelStream()
+                .collect(Collectors.groupingBy(Enrollment::getStudentId));
             
-            return studentGrades.entrySet().parallelStream()
-                .filter(entry -> {
-                    List<Grade> grades = entry.getValue();
-                    double gpa = calculateGPA(grades);
-                    return gpa >= minGPA;
-                })
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toList());
+            return studentsMatching(studentGrades, gpa -> gpa >= minGPA);
         }, executorService);
     }
     
     // Helper methods
     
-    private double calculateGradePoints(Grade grade) {
-        return getGradePointValue(grade.getLetterGrade()) * 
-               grade.getCourse().getCredits();
+    private static List<Enrollment> graded(List<Enrollment> enrollments) {
+        return enrollments.stream()
+            .filter(enrollment -> enrollment.getGrade() != null
+                && enrollment.getGrade() != Enrollment.Grade.NOT_GRADED
+                && enrollment.getStudentId() != null
+                && enrollment.getCourseId() != null)
+            .collect(Collectors.toList());
     }
     
-    private double getGradePointValue(String letterGrade) {
-        switch (letterGrade.toUpperCase()) {
-            case "A": return 4.0;
-            case "A-": return 3.7;
-            case "B+": return 3.3;
-            case "B": return 3.0;
-            case "B-": return 2.7;
-            case "C+": return 2.3;
-            case "C": return 2.0;
-            case "C-": return 1.7;
-            case "D+": return 1.3;
-            case "D": return 1.0;
-            case "F": return 0.0;
-            default: return 0.0;
-        }
+    private static String letterOf(Enrollment enrollment) {
+        return enrollment.getGrade().getLetter();
     }
     
-    private double calculateGPA(List<Grade> grades) {
+    private List<Enrollment> findSemesterGrades(String semester, String academicYear) {
+        return graded(enrollmentRepository.findByAcademicYear(academicYear)).stream()
+            .filter(enrollment -> semester.equalsIgnoreCase(enrollment.getSemester()))
+            .collect(Collectors.toList());
+    }
+    
+    private List<Student> studentsMatching(Map<String, List<Enrollment>> studentGrades,
+                                           DoublePredicate gpaFilter) {
+        return studentGrades.entrySet().parallelStream()
+            .filter(entry -> gpaFilter.test(calculateGPA(entry.getValue())))
+            .map(entry -> studentRepository.findById(entry.getKey()))
+            .flatMap(Optional::stream)
+            .collect(Collectors.toList());
+    }
+    
+    private static int termOrder(String semester) {
+        if (semester == null) return 0;
+        String normalized = semester.toLowerCase();
+        if (normalized.contains("spring")) return 1;
+        if (normalized.contains("summer")) return 2;
+        if (normalized.contains("fall")) return 3;
+        return 0;
+    }
+    
+    private double calculateGPA(List<Enrollment> grades) {
         if (grades.isEmpty()) return 0.0;
         
         double totalGradePoints = grades.stream()
-            .mapToDouble(this::calculateGradePoints)
+            .filter(Enrollment::countsTowardGpa)
+            .mapToDouble(Enrollment::getGpaPoints)
             .sum();
         
         int totalCredits = grades.stream()
-            .mapToInt(grade -> grade.getCourse().getCredits())
+            .filter(Enrollment::countsTowardGpa)
+            .mapToInt(Enrollment::getCreditHours)
             .sum();
         
         return totalCredits > 0 ? totalGradePoints / totalCredits : 0.0;
@@ -418,12 +462,12 @@ public class ConcurrentGradeCalculator {
         private final String academicYear;
         private final int totalStudents;
         private final double averageGrade;
-        private final Map<Department, Map<String, Long>> departmentDistribution;
+        private final Map<String, Map<String, Long>> departmentDistribution;
         private final Map<String, Long> overallDistribution;
         
         public SemesterStatistics(String semester, String academicYear,
                                 int totalStudents, double averageGrade,
-                                Map<Department, Map<String, Long>> departmentDistribution,
+                                Map<String, Map<String, Long>> departmentDistribution,
                                 Map<String, Long> overallDistribution) {
             this.semester = semester;
             this.academicYear = academicYear;
@@ -438,7 +482,7 @@ public class ConcurrentGradeCalculator {
         public String getAcademicYear() { return academicYear; }
         public int getTotalStudents() { return totalStudents; }
         public double getAverageGrade() { return averageGrade; }
-        public Map<Department, Map<String, Long>> getDepartmentDistribution() { return departmentDistribution; }
+        public Map<String, Map<String, Long>> getDepartmentDistribution() { return departmentDistribution; }
         public Map<String, Long> getOverallDistribution() { return overallDistribution; }
     }
     
@@ -463,11 +507,11 @@ public class ConcurrentGradeCalculator {
     // Fork/Join task for department statistics
     private static class DepartmentStatisticsTask extends RecursiveTask<DepartmentStatisticsResult> {
         private static final int THRESHOLD = 1000;
-        private final List<Grade> grades;
+        private final List<Enrollment> grades;
         private final int start;
         private final int end;
         
-        public DepartmentStatisticsTask(List<Grade> grades, int start, int end) {
+        public DepartmentStatisticsTask(List<Enrollment> grades, int start, int end) {
             this.grades = grades;
             this.start = start;
             this.end = end;
@@ -491,23 +535,23 @@ public class ConcurrentGradeCalculator {
         }
         
         private DepartmentStatisticsResult computeDirectly() {
-            Map<Course, List<Double>> courseGrades = new HashMap<>();
+            Map<String, List<Double>> courseGrades = new HashMap<>();
             Map<String, Long> gradeDistribution = new HashMap<>();
             DoubleAdder totalGrade = new DoubleAdder();
             int count = 0;
             
             for (int i = start; i < end; i++) {
-                Grade grade = grades.get(i);
+                Enrollment grade = grades.get(i);
                 
-                courseGrades.computeIfAbsent(grade.getCourse(), k -> new ArrayList<>())
+                courseGrades.computeIfAbsent(grade.getCourseId(), k -> new ArrayList<>())
                            .add(grade.getNumericGrade());
                 
-                gradeDistribution.merge(grade.getLetterGrade(), 1L, Long::sum);
+                gradeDistribution.merge(letterOf(grade), 1L, Long::sum);
                 totalGrade.add(grade.getNumericGrade());
                 count++;
             }
             
-            Map<Course, Double> courseAverages = courseGrades.entrySet().stream()
+            Map<String, Double> courseAverages = courseGrades.entrySet().stream()
                 .collect(Collectors.toMap(
                     Map.Entry::getKey,
                     entry -> entry.getValue().stream().mapToDouble(Double::doubleValue).average().orElse(0.0)
@@ -520,7 +564,7 @@ public class ConcurrentGradeCalculator {
         
         private DepartmentStatisticsResult mergeResults(DepartmentStatisticsResult left, 
                                                        DepartmentStatisticsResult right) {
-            Map<Course, Double> mergedCourseAverages = new HashMap<>(left.getCourseAverages());
+            Map<String, Double> mergedCourseAverages = new HashMap<>(left.getCourseAverages());
             right.getCourseAverages().forEach((course, avg) -> 
                 mergedCourseAverages.merge(course, avg, (v1, v2) -> (v1 + v2) / 2));
             
@@ -536,11 +580,11 @@ public class ConcurrentGradeCalculator {
     }
     
     private static class DepartmentStatisticsResult {
-        private final Map<Course, Double> courseAverages;
+        private final Map<String, Double> courseAverages;
         private final double overallAverage;
         private final Map<String, Long> gradeDistribution;
         
-        public DepartmentStatisticsResult(Map<Course, Double> courseAverages,
+        public DepartmentStatisticsResult(Map<String, Double> courseAverages,
                                         double overallAverage,
                                         Map<String, Long> gradeDistribution) {
             this.courseAverages = courseAverages;
@@ -548,7 +592,7 @@ public class ConcurrentGradeCalculator {
             this.gradeDistribution = gradeDistribution;
         }
         
-        public Map<Course, Double> getCourseAverages() { return courseAverages; }
+        public Map<String, Double> getCourseAverages() { return courseAverages; }
         public double getOverallAverage() { return overallAverage; }
         public Map<String, Long> getGradeDistribution() { return gradeDistribution; }
     }

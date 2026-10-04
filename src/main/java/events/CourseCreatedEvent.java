@@ -204,7 +204,7 @@ public class CourseCreatedEvent extends Event {
     public String getCourseNumber() { return courseNumber; }
     public String getDepartmentCode() { return departmentCode; }
     public String getDepartmentName() { return departmentName; }
-    public String getDescription() { return description; }
+    public String getCourseDescription() { return description; }
     public int getCredits() { return credits; }
     public Semester getSemester() { return semester; }
     public int getAcademicYear() { return academicYear; }
@@ -349,7 +349,7 @@ public class CourseCreatedEvent extends Event {
             description.append(" (").append(deliveryMode).append(")");
         }
         
-        if (status != CourseStatus.ACTIVE) {
+        if (status != CourseStatus.ENROLLMENT_OPEN) {
             description.append(" - Status: ").append(status.getDisplayName());
         }
         
@@ -559,7 +559,7 @@ public class CourseCreatedEvent extends Event {
         private int credits = 0;
         private Semester semester;
         private int academicYear;
-        private CourseStatus status = CourseStatus.ACTIVE;
+        private CourseStatus status = CourseStatus.ENROLLMENT_OPEN;
         private String instructorId;
         private String instructorName;
         private int maxEnrollment = 0;

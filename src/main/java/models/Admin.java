@@ -141,7 +141,11 @@ public class Admin extends User {
     @Override
     public void displayInfo() {
         System.out.println("=== ADMIN INFORMATION ===");
-        super.displayInfo(); // Call parent's displayInfo
+        System.out.println("User ID: " + getUserId());
+        System.out.println("Name: " + getFullName());
+        System.out.println("Email: " + getEmail());
+        System.out.println("Phone: " + (getPhoneNumber() != null ? getPhoneNumber() : "Not set"));
+        System.out.println("Active: " + isActive());
         System.out.println("Admin ID: " + adminId);
         System.out.println("Admin Level: " + adminLevel.getDisplayName());
         System.out.println("Department: " + department.getDisplayName());

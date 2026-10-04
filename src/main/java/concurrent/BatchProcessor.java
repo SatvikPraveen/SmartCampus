@@ -9,6 +9,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -268,7 +269,7 @@ public class BatchProcessor {
     /**
      * Scheduled batch processing
      */
-    public ScheduledFuture<BatchResult<Student>> scheduleStudentBatchProcessing(
+    public ScheduledFuture<?> scheduleStudentBatchProcessing(
             Supplier<List<Student>> dataSupplier, 
             Function<Student, Student> processor,
             long delay, long period, TimeUnit unit) {

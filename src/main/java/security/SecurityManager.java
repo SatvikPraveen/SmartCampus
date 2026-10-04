@@ -73,7 +73,7 @@ public class SecurityManager {
     /**
      * Authenticates user with username and password
      */
-    public AuthenticationResult authenticate(String username, String password, String ipAddress, String userAgent) {
+    public AuthenticationResult authenticate(String username, String password, String ipAddress, String userAgent) throws AuthenticationException {
         if (username == null || password == null) {
             throw AuthenticationException.invalidCredentials(username, ipAddress);
         }
@@ -127,7 +127,7 @@ public class SecurityManager {
     /**
      * Authenticates using token
      */
-    public AuthenticationResult authenticateWithToken(String token, String ipAddress) {
+    public AuthenticationResult authenticateWithToken(String token, String ipAddress) throws AuthenticationException {
         if (token == null) {
             throw AuthenticationException.invalidToken("Bearer", "Token is null");
         }
@@ -157,7 +157,10 @@ public class SecurityManager {
             // Get user (typically from cache or database)
             User user = getUserByUsername(tokenInfo.getUsername());
             if (user == null) {
-                throw AuthenticationException.accountNotFound(tokenInfo.getUsername());
+                throw AuthenticationException.builder(AuthenticationException.ErrorCode.ACCOUNT_NOT_FOUND)
+                    .username(tokenInfo.getUsername())
+                    .message("Account not found for user: " + tokenInfo.getUsername())
+                    .build();
             }
             
             return new AuthenticationResult(user, session, token, false);
@@ -203,13 +206,13 @@ public class SecurityManager {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiresAt = now.plus(config.getSessionTimeoutMinutes(), ChronoUnit.MINUTES);
         
-        SessionInfo session = new SessionInfo(sessionId, user.getUsername(), user.getRole(),
+        SessionInfo session = new SessionInfo(sessionId, user.getUserId(), RoleBasedAccess.resolveRole(user),
                                             ipAddress, userAgent, now, expiresAt);
         
         lock.writeLock().lock();
         try {
             activeSessions.put(sessionId, session);
-            userSessions.computeIfAbsent(user.getUsername(), k -> new ArrayList<>()).add(session);
+            userSessions.computeIfAbsent(user.getUserId(), k -> new ArrayList<>()).add(session);
         } finally {
             lock.writeLock().unlock();
         }
@@ -316,7 +319,7 @@ public class SecurityManager {
         User user = getUserByUsername(username);
         if (user == null) return false;
         
-        return roleBasedAccess.hasPermission(user.getRole(), resource, action);
+        return roleBasedAccess.hasPermission(RoleBasedAccess.resolveRole(user), resource, action);
     }
     
     /**
@@ -326,13 +329,13 @@ public class SecurityManager {
         User user = getUserByUsername(username);
         if (user == null) return false;
         
-        return roleBasedAccess.hasRole(user.getRole(), requiredRole);
+        return roleBasedAccess.hasRole(RoleBasedAccess.resolveRole(user), requiredRole);
     }
     
     /**
      * Validates access to resource
      */
-    public void validateAccess(String username, String resource, String action) {
+    public void validateAccess(String username, String resource, String action) throws AuthenticationException {
         if (!hasPermission(username, resource, action)) {
             User user = getUserByUsername(username);
             UserRole requiredRole = roleBasedAccess.getRequiredRole(resource, action);
@@ -351,7 +354,7 @@ public class SecurityManager {
     /**
      * Changes user password
      */
-    public void changePassword(String username, String oldPassword, String newPassword) {
+    public void changePassword(String username, String oldPassword, String newPassword) throws AuthenticationException {
         // Validate old password
         User user = validateCredentials(username, oldPassword);
         if (user == null) {
@@ -390,7 +393,7 @@ public class SecurityManager {
     /**
      * Resets password (admin function)
      */
-    public String resetPassword(String username, String adminUsername) {
+    public String resetPassword(String username, String adminUsername) throws AuthenticationException {
         // Validate admin permissions
         validateAccess(adminUsername, "user_management", "reset_password");
         
@@ -418,26 +421,19 @@ public class SecurityManager {
         return null;
     }
     
-    private void validateAccountStatus(User user) {
-        if (user.isDisabled()) {
-            throw AuthenticationException.accountDisabled(user.getUsername(), "Account disabled by administrator");
-        }
-        
-        if (user.isExpired()) {
-            throw AuthenticationException.builder(AuthenticationException.ErrorCode.ACCOUNT_EXPIRED)
-                .username(user.getUsername())
-                .message("Account has expired")
-                .build();
+    private void validateAccountStatus(User user) throws AuthenticationException {
+        if (!user.isActive()) {
+            throw AuthenticationException.accountDisabled(user.getUserId(), "Account disabled by administrator");
         }
     }
     
-    private void checkPasswordExpiration(User user) {
-        if (isPasswordExpired(user.getUsername())) {
-            throw AuthenticationException.passwordExpired(user.getUsername(), getPasswordExpirationDate(user.getUsername()));
+    private void checkPasswordExpiration(User user) throws AuthenticationException {
+        if (isPasswordExpired(user.getUserId())) {
+            throw AuthenticationException.passwordExpired(user.getUserId(), getPasswordExpirationDate(user.getUserId()));
         }
     }
     
-    private void checkConcurrentSessions(String username) {
+    private void checkConcurrentSessions(String username) throws AuthenticationException {
         List<SessionInfo> sessions = getUserSessions(username);
         if (sessions.size() >= config.getMaxConcurrentSessions()) {
             throw AuthenticationException.concurrentSessionLimit(username, config.getMaxConcurrentSessions());

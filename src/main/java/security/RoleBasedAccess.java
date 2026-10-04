@@ -2,6 +2,9 @@
 package security;
 
 import enums.UserRole;
+import models.Admin;
+import models.Professor;
+import models.User;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,6 +42,15 @@ public class RoleBasedAccess {
     public static final String EXPORT = "export";
     public static final String IMPORT = "import";
     
+    // Access tiers: each concrete UserRole is grouped into one of four permission tiers
+    private static final Set<UserRole> STUDENT_TIER = EnumSet.of(
+        UserRole.STUDENT, UserRole.STUDENT_LEADER, UserRole.GRADUATE_STUDENT, UserRole.TEACHING_ASSISTANT);
+    private static final Set<UserRole> PROFESSOR_TIER = EnumSet.of(
+        UserRole.ADJUNCT_PROFESSOR, UserRole.ASSISTANT_PROFESSOR, UserRole.ASSOCIATE_PROFESSOR,
+        UserRole.FULL_PROFESSOR, UserRole.DEPARTMENT_CHAIR, UserRole.DEAN);
+    private static final Set<UserRole> ADMIN_TIER = EnumSet.of(UserRole.SYSTEM_ADMINISTRATOR);
+    private static final Set<UserRole> SUPER_ADMIN_TIER = EnumSet.of(UserRole.SUPER_ADMIN);
+    
     public RoleBasedAccess() {
         this.rolePermissions = new ConcurrentHashMap<>();
         this.resourcePermissions = new ConcurrentHashMap<>();
@@ -52,10 +64,15 @@ public class RoleBasedAccess {
     
     private void initializeRoleHierarchy() {
         // Define role hierarchy (higher roles inherit lower role permissions)
-        roleHierarchy.put(UserRole.SUPER_ADMIN, Set.of(UserRole.ADMIN, UserRole.PROFESSOR, UserRole.STUDENT));
-        roleHierarchy.put(UserRole.ADMIN, Set.of(UserRole.PROFESSOR, UserRole.STUDENT));
-        roleHierarchy.put(UserRole.PROFESSOR, Set.of(UserRole.STUDENT));
-        roleHierarchy.put(UserRole.STUDENT, Set.of()); // No inherited roles
+        Set<UserRole> belowAdmin = EnumSet.copyOf(PROFESSOR_TIER);
+        belowAdmin.addAll(STUDENT_TIER);
+        Set<UserRole> belowSuperAdmin = EnumSet.copyOf(belowAdmin);
+        belowSuperAdmin.addAll(ADMIN_TIER);
+        
+        SUPER_ADMIN_TIER.forEach(role -> roleHierarchy.put(role, belowSuperAdmin));
+        ADMIN_TIER.forEach(role -> roleHierarchy.put(role, belowAdmin));
+        PROFESSOR_TIER.forEach(role -> roleHierarchy.put(role, STUDENT_TIER));
+        STUDENT_TIER.forEach(role -> roleHierarchy.put(role, Set.of())); // No inherited roles
     }
     
     // ==================== PERMISSION INITIALIZATION ====================
@@ -90,7 +107,7 @@ public class RoleBasedAccess {
         // Basic reports
         studentPermissions.add(permissionKey(REPORTS, READ));
         
-        rolePermissions.put(UserRole.STUDENT.name(), studentPermissions);
+        putTierPermissions(STUDENT_TIER, studentPermissions);
     }
     
     private void initializeProfessorPermissions() {
@@ -127,7 +144,7 @@ public class RoleBasedAccess {
         professorPermissions.add(permissionKey(NOTIFICATIONS, CREATE));
         professorPermissions.add(permissionKey(NOTIFICATIONS, READ));
         
-        rolePermissions.put(UserRole.PROFESSOR.name(), professorPermissions);
+        putTierPermissions(PROFESSOR_TIER, professorPermissions);
     }
     
     private void initializeAdminPermissions() {
@@ -188,7 +205,7 @@ public class RoleBasedAccess {
         adminPermissions.add(permissionKey(NOTIFICATIONS, UPDATE));
         adminPermissions.add(permissionKey(NOTIFICATIONS, DELETE));
         
-        rolePermissions.put(UserRole.ADMIN.name(), adminPermissions);
+        putTierPermissions(ADMIN_TIER, adminPermissions);
     }
     
     private void initializeSuperAdminPermissions() {
@@ -211,7 +228,15 @@ public class RoleBasedAccess {
         superAdminPermissions.add(permissionKey(USER_MANAGEMENT, "enable_account"));
         superAdminPermissions.add(permissionKey(USER_MANAGEMENT, "change_role"));
         
-        rolePermissions.put(UserRole.SUPER_ADMIN.name(), superAdminPermissions);
+        putTierPermissions(SUPER_ADMIN_TIER, superAdminPermissions);
+    }
+    
+    private void putTierPermissions(Set<UserRole> tier, Set<String> permissions) {
+        for (UserRole role : tier) {
+            Set<String> rolePerms = ConcurrentHashMap.newKeySet();
+            rolePerms.addAll(permissions);
+            rolePermissions.put(role.name(), rolePerms);
+        }
     }
     
     private void initializeResourcePermissions() {
@@ -220,7 +245,7 @@ public class RoleBasedAccess {
             STUDENT_MANAGEMENT,
             "Student management operations",
             Set.of(CREATE, READ, UPDATE, DELETE),
-            UserRole.ADMIN
+            UserRole.SYSTEM_ADMINISTRATOR
         ));
         
         // Professor Management
@@ -228,7 +253,7 @@ public class RoleBasedAccess {
             PROFESSOR_MANAGEMENT,
             "Professor management operations",
             Set.of(CREATE, READ, UPDATE, DELETE),
-            UserRole.ADMIN
+            UserRole.SYSTEM_ADMINISTRATOR
         ));
         
         // Course Management
@@ -236,7 +261,7 @@ public class RoleBasedAccess {
             COURSE_MANAGEMENT,
             "Course management operations",
             Set.of(CREATE, READ, UPDATE, DELETE),
-            UserRole.PROFESSOR
+            UserRole.ADJUNCT_PROFESSOR
         ));
         
         // Grade Management
@@ -244,7 +269,7 @@ public class RoleBasedAccess {
             GRADE_MANAGEMENT,
             "Grade management operations",
             Set.of(CREATE, READ, UPDATE, APPROVE),
-            UserRole.PROFESSOR
+            UserRole.ADJUNCT_PROFESSOR
         ));
         
         // System Administration
@@ -254,6 +279,41 @@ public class RoleBasedAccess {
             Set.of(CREATE, READ, UPDATE, DELETE, EXECUTE),
             UserRole.SUPER_ADMIN
         ));
+    }
+    
+    /**
+     * Maps a user's role name onto the corresponding access-control role
+     */
+    public static UserRole resolveRole(User user) {
+        String roleName = user.getRole();
+        if (roleName == null) {
+            return UserRole.STUDENT;
+        }
+        Optional<UserRole> byDisplayName = UserRole.findByDisplayName(roleName);
+        if (byDisplayName.isPresent()) {
+            return byDisplayName.get();
+        }
+        try {
+            return UserRole.valueOf(roleName.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            // fall through to model-specific mapping
+        }
+        if (user instanceof Admin admin) {
+            return admin.getAdminLevel() == Admin.AdminLevel.SUPER_ADMIN
+                ? UserRole.SUPER_ADMIN : UserRole.SYSTEM_ADMINISTRATOR;
+        }
+        if (user instanceof Professor professor) {
+            if (professor.getAcademicRank() == null) {
+                return UserRole.ADJUNCT_PROFESSOR;
+            }
+            return switch (professor.getAcademicRank()) {
+                case ADJUNCT -> UserRole.ADJUNCT_PROFESSOR;
+                case ASSISTANT -> UserRole.ASSISTANT_PROFESSOR;
+                case ASSOCIATE -> UserRole.ASSOCIATE_PROFESSOR;
+                case FULL, EMERITUS -> UserRole.FULL_PROFESSOR;
+            };
+        }
+        return UserRole.STUDENT;
     }
     
     // ==================== PERMISSION CHECKING ====================
@@ -569,12 +629,16 @@ public class RoleBasedAccess {
         }
         
         // Apply role-specific contextual rules
-        return switch (role) {
-            case PROFESSOR -> applyProfessorContextualRules(resource, action, context);
-            case STUDENT -> applyStudentContextualRules(resource, action, context);
-            case ADMIN -> applyAdminContextualRules(resource, action, context);
-            case SUPER_ADMIN -> true; // Super admin bypasses contextual restrictions
-        };
+        if (SUPER_ADMIN_TIER.contains(role)) {
+            return true; // Super admin bypasses contextual restrictions
+        } else if (ADMIN_TIER.contains(role)) {
+            return applyAdminContextualRules(resource, action, context);
+        } else if (PROFESSOR_TIER.contains(role)) {
+            return applyProfessorContextualRules(resource, action, context);
+        } else if (STUDENT_TIER.contains(role)) {
+            return applyStudentContextualRules(resource, action, context);
+        }
+        return true;
     }
     
     private boolean applyProfessorContextualRules(String resource, String action, 

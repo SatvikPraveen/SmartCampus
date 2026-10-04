@@ -478,7 +478,7 @@ public class GradeUpdatedEvent extends Event {
             if (previousGrade.getGpaPoints() != null && newGrade.getGpaPoints() != null) {
                 double change = Math.abs(newGrade.getGpaPoints() - previousGrade.getGpaPoints());
                 if (change >= 1.0) {
-                    return Priority.MEDIUM;
+                    return Priority.NORMAL;
                 }
             }
         }

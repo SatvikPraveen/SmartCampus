@@ -9,6 +9,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Handles asynchronous notification operations
@@ -269,29 +270,37 @@ public class AsyncNotificationSender {
     private boolean sendNotification(NotificationTask task) {
         switch (task.getType()) {
             case EMAIL:
-                return notificationService.sendEmail(
-                    task.getRecipient(), task.getSubject(), task.getMessage());
-            case SMS:
-                return notificationService.sendSMS(
-                    task.getRecipient(), task.getMessage());
-            case PUSH:
-                return notificationService.sendPushNotification(
-                    task.getRecipient(), task.getSubject(), task.getMessage());
-            case ENROLLMENT_CONFIRMATION:
-                return notificationService.sendEnrollmentConfirmation(
-                    getStudentByEmail(task.getRecipient()), 
-                    getCourseFromMessage(task.getMessage()));
-            case GRADE_NOTIFICATION:
-                return notificationService.sendGradeNotification(
-                    getStudentByEmail(task.getRecipient()),
-                    getCourseFromMessage(task.getMessage()),
-                    getGradeFromMessage(task.getMessage()));
             case BULK_NOTIFICATION:
-                return notificationService.sendEmail(
-                    task.getRecipient(), task.getSubject(), task.getMessage());
+                return deliver(task, NotificationService.NotificationType.INFO,
+                               NotificationService.DeliveryChannel.EMAIL);
+            case SMS:
+                return deliver(task, NotificationService.NotificationType.INFO,
+                               NotificationService.DeliveryChannel.SMS);
+            case PUSH:
+                return deliver(task, NotificationService.NotificationType.INFO,
+                               NotificationService.DeliveryChannel.PUSH);
+            case ENROLLMENT_CONFIRMATION:
+            case GRADE_NOTIFICATION:
+                return deliver(task, NotificationService.NotificationType.ACADEMIC,
+                               NotificationService.DeliveryChannel.EMAIL);
             default:
                 return false;
         }
+    }
+    
+    /**
+     * Hands a task to the notification service over the given delivery channel
+     */
+    private boolean deliver(NotificationTask task, NotificationService.NotificationType type,
+                            NotificationService.DeliveryChannel channel) {
+        String title = task.getSubject() != null ? task.getSubject() : type.getDisplayName();
+        return notificationService.sendNotification(
+            task.getRecipient(),
+            type,
+            title,
+            task.getMessage(),
+            NotificationService.Priority.valueOf(task.getPriority().name()),
+            Set.of(channel)) != null;
     }
     
     /**
@@ -314,14 +323,14 @@ public class AsyncNotificationSender {
         return String.format(
             "Dear %s,\n\nYou have been successfully enrolled in %s (%s).\n\n" +
             "Course Details:\n" +
-            "- Professor: %s\n" +
+            "- Professor ID: %s\n" +
             "- Credits: %d\n" +
             "- Semester: %s\n\n" +
             "Best regards,\nRegistrar's Office",
-            student.getName(),
-            course.getName(),
+            student.getFullName(),
+            course.getCourseName(),
             course.getCourseCode(),
-            course.getProfessor().getName(),
+            course.getProfessorId() != null ? course.getProfessorId() : "TBA",
             course.getCredits(),
             course.getSemester()
         );
@@ -333,32 +342,16 @@ public class AsyncNotificationSender {
     private String createGradeMessage(Student student, Course course, Grade grade) {
         return String.format(
             "Dear %s,\n\nA new grade has been posted for %s (%s).\n\n" +
-            "Grade: %s (%.1f)\n" +
+            "Grade: %s (%.1f%%)\n" +
             "Comments: %s\n\n" +
             "Best regards,\nAcademic Affairs",
-            student.getName(),
-            course.getName(),
+            student.getFullName(),
+            course.getCourseName(),
             course.getCourseCode(),
             grade.getLetterGrade(),
-            grade.getNumericGrade(),
-            grade.getComments() != null ? grade.getComments() : "No comments"
+            grade.getPercentage(),
+            grade.getFeedback() != null ? grade.getFeedback() : "No comments"
         );
-    }
-    
-    // Helper methods (these would need proper implementation)
-    private Student getStudentByEmail(String email) {
-        // Implementation would look up student by email
-        return null;
-    }
-    
-    private Course getCourseFromMessage(String message) {
-        // Implementation would extract course from message
-        return null;
-    }
-    
-    private Grade getGradeFromMessage(String message) {
-        // Implementation would extract grade from message
-        return null;
     }
     
     /**

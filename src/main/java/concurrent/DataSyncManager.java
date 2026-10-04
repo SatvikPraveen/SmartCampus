@@ -322,10 +322,10 @@ public class DataSyncManager {
         
         for (Student student : students) {
             if (student.getEmail() == null || student.getEmail().trim().isEmpty()) {
-                errors.add("Student " + student.getId() + " has no email");
+                errors.add("Student " + student.getStudentId() + " has no email");
             }
-            if (student.getDepartment() == null) {
-                errors.add("Student " + student.getId() + " has no department");
+            if (student.getDepartmentId() == null) {
+                errors.add("Student " + student.getStudentId() + " has no department");
             }
         }
         
@@ -338,10 +338,10 @@ public class DataSyncManager {
         
         for (Professor professor : professors) {
             if (professor.getEmail() == null || professor.getEmail().trim().isEmpty()) {
-                errors.add("Professor " + professor.getId() + " has no email");
+                errors.add("Professor " + professor.getProfessorId() + " has no email");
             }
-            if (professor.getDepartment() == null) {
-                errors.add("Professor " + professor.getId() + " has no department");
+            if (professor.getDepartmentId() == null) {
+                errors.add("Professor " + professor.getProfessorId() + " has no department");
             }
         }
         
@@ -353,13 +353,13 @@ public class DataSyncManager {
         List<Course> courses = courseRepository.findAll();
         
         for (Course course : courses) {
-            if (course.getDepartment() == null) {
+            if (course.getDepartmentId() == null) {
                 errors.add("Course " + course.getCourseCode() + " has no department");
             }
-            if (course.getProfessor() == null) {
+            if (course.getProfessorId() == null) {
                 errors.add("Course " + course.getCourseCode() + " has no professor");
             }
-            if (course.getCapacity() <= 0) {
+            if (course.getMaxEnrollment() <= 0) {
                 errors.add("Course " + course.getCourseCode() + " has invalid capacity");
             }
         }
@@ -372,10 +372,10 @@ public class DataSyncManager {
         List<Enrollment> enrollments = enrollmentRepository.findAll();
         
         for (Enrollment enrollment : enrollments) {
-            if (enrollment.getStudent() == null) {
+            if (enrollment.getStudentId() == null) {
                 errors.add("Enrollment " + enrollment.getEnrollmentId() + " has no student");
             }
-            if (enrollment.getCourse() == null) {
+            if (enrollment.getCourseId() == null) {
                 errors.add("Enrollment " + enrollment.getEnrollmentId() + " has no course");
             }
         }

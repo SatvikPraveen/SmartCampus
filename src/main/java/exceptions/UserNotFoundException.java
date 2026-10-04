@@ -56,17 +56,6 @@ public class UserNotFoundException extends RuntimeException {
     }
     
     /**
-     * Constructor with user ID.
-     * @param userId The ID of the user that was not found
-     */
-    public UserNotFoundException(String userId) {
-        super("User not found with ID: " + userId);
-        this.userId = userId;
-        this.userType = null;
-        this.searchCriteria = userId;
-    }
-    
-    /**
      * Constructor with user ID and user type.
      * @param userId The ID of the user that was not found
      * @param userType The type of user (Student, Professor, etc.)
