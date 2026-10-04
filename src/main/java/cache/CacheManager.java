@@ -419,6 +419,8 @@ public class CacheManager {
         try {
             CacheContainer<?> cache = caches.remove(cacheName);
             if (cache != null) {
+                // Keep evictions of removed caches in the global total
+                totalEvictions += cache.evictions;
                 cache.clear();
             }
         } finally {
@@ -514,7 +516,8 @@ public class CacheManager {
             stats.put("totalCaches", caches.size());
             stats.put("totalHits", totalHits);
             stats.put("totalMisses", totalMisses);
-            stats.put("totalEvictions", totalEvictions);
+            stats.put("totalEvictions", totalEvictions
+                + caches.values().stream().mapToLong(c -> c.evictions).sum());
             stats.put("globalHitRatio", (totalHits + totalMisses) > 0 ? 
                      (double) totalHits / (totalHits + totalMisses) : 0.0);
             
@@ -553,7 +556,6 @@ public class CacheManager {
         try {
             for (CacheContainer<?> cache : caches.values()) {
                 cache.cleanExpired();
-                totalEvictions += cache.evictions;
             }
         } finally {
             lock.readLock().unlock();

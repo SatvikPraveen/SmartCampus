@@ -296,9 +296,9 @@ public class LRUCache<K, V> {
      * Gets all keys
      */
     public Set<K> keySet() {
+        cleanExpired(); // takes the write lock; must not be called while holding the read lock
         lock.readLock().lock();
         try {
-            cleanExpired();
             return new HashSet<>(map.keySet());
         } finally {
             lock.readLock().unlock();
@@ -309,9 +309,9 @@ public class LRUCache<K, V> {
      * Gets all values
      */
     public Collection<V> values() {
+        cleanExpired(); // takes the write lock; must not be called while holding the read lock
         lock.readLock().lock();
         try {
-            cleanExpired();
             return map.values().stream()
                      .map(node -> node.value)
                      .collect(java.util.stream.Collectors.toList());
@@ -324,9 +324,9 @@ public class LRUCache<K, V> {
      * Gets all entries
      */
     public Set<Map.Entry<K, V>> entrySet() {
+        cleanExpired(); // takes the write lock; must not be called while holding the read lock
         lock.readLock().lock();
         try {
-            cleanExpired();
             return map.entrySet().stream()
                      .collect(java.util.stream.Collectors.toMap(
                          Map.Entry::getKey,
@@ -480,7 +480,12 @@ public class LRUCache<K, V> {
     public CacheStats getStats() {
         lock.readLock().lock();
         try {
-            double hitRatio = (hits + misses) > 0 ? (double) hits / (hits + misses) : 0.0;
+            // Snapshot every counter so the returned stats are internally consistent
+            final long hits = this.hits;
+            final long misses = this.misses;
+            final long evictions = this.evictions;
+            final int currentSize = map.size();
+            final double hitRatio = (hits + misses) > 0 ? (double) hits / (hits + misses) : 0.0;
             
             return new CacheStats() {
                 @Override
@@ -496,7 +501,7 @@ public class LRUCache<K, V> {
                 public double getHitRatio() { return hitRatio; }
                 
                 @Override
-                public int getCurrentSize() { return map.size(); }
+                public int getCurrentSize() { return currentSize; }
                 
                 @Override
                 public int getMaxSize() { return capacity; }
