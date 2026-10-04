@@ -219,7 +219,7 @@ public enum Priority {
     }
     
     public static List<Priority> getByCategory(PriorityCategory category) {
-        return CATEGORY_MAP.getOrDefault(category, new ArrayList<>());
+        return new ArrayList<>(CATEGORY_MAP.getOrDefault(category, Collections.emptyList()));
     }
     
     public static List<Priority> getEscalationPriorities() {

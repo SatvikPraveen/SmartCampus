@@ -111,6 +111,10 @@ public enum GradeLevel {
     private static final Map<GradeCategory, List<GradeLevel>> CATEGORY_MAP;
     private static final List<GradeLevel> STANDARD_GRADES;
     private static final List<GradeLevel> PASS_FAIL_GRADES;
+    private static final List<GradeLevel> LETTER_SCALE;
+    private static final List<GradeCategory> PERFORMANCE_CATEGORIES = List.of(
+        GradeCategory.EXCELLENT, GradeCategory.GOOD, GradeCategory.SATISFACTORY,
+        GradeCategory.BELOW_AVERAGE, GradeCategory.FAILING);
     
     static {
         LETTER_GRADE_MAP = Arrays.stream(values())
@@ -131,6 +135,8 @@ public enum GradeLevel {
             .collect(Collectors.toList());
             
         PASS_FAIL_GRADES = getGradesByCategory(GradeCategory.PASS_FAIL);
+        LETTER_SCALE = List.of(A_PLUS, A, A_MINUS, B_PLUS, B, B_MINUS,
+                               C_PLUS, C, C_MINUS, D_PLUS, D, D_MINUS, F);
     }
     
     // Constructor
@@ -197,22 +203,25 @@ public enum GradeLevel {
     }
     
     public static GradeLevel fromPercentage(double percentage) {
-        return STANDARD_GRADES.stream()
-            .filter(grade -> grade.isInRange(percentage))
+        // Only the undergraduate letter scale (A+ .. F) applies here. The scale is
+        // ordered from highest to lowest band, so the first band whose lower bound
+        // is reached wins; this also covers values that fall between the
+        // published one-decimal band edges (e.g. 96.95) and scores above 100.
+        return LETTER_SCALE.stream()
+            .filter(grade -> percentage >= grade.getMinPercentage())
             .findFirst()
             .orElse(F);
     }
     
     public static GradeLevel fromGpaPoints(double gpaPoints) {
-        return STANDARD_GRADES.stream()
-            .filter(grade -> grade.getGpaPoints() != null)
+        return LETTER_SCALE.stream()
             .min(Comparator.comparing(grade -> 
                 Math.abs(grade.getGpaPoints() - gpaPoints)))
             .orElse(F);
     }
     
     public static List<GradeLevel> getGradesByCategory(GradeCategory category) {
-        return CATEGORY_MAP.getOrDefault(category, new ArrayList<>());
+        return new ArrayList<>(CATEGORY_MAP.getOrDefault(category, Collections.emptyList()));
     }
     
     public static List<GradeLevel> getPassingGrades() {
@@ -263,10 +272,15 @@ public enum GradeLevel {
     }
     
     public static GradeCategory getGpaCategory(double gpa) {
-        return Arrays.stream(GradeCategory.values())
-            .filter(category -> category.includesGpa(gpa))
-            .findFirst()
-            .orElse(GradeCategory.FAILING);
+        // Classify against the performance bands by their lower bound only, so a
+        // GPA between two published bands (e.g. 3.65) or above 4.0 still lands in
+        // the band it has reached instead of an unrelated catch-all category.
+        for (GradeCategory category : PERFORMANCE_CATEGORIES) {
+            if (gpa >= category.getMinGpa()) {
+                return category;
+            }
+        }
+        return GradeCategory.FAILING;
     }
     
     // Advanced utility methods

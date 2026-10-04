@@ -178,7 +178,7 @@ public enum Semester {
     }
     
     public static List<Semester> getByType(SemesterType type) {
-        return TYPE_MAP.getOrDefault(type, new ArrayList<>());
+        return new ArrayList<>(TYPE_MAP.getOrDefault(type, Collections.emptyList()));
     }
     
     public static List<Semester> getTraditionalSemesters() {
