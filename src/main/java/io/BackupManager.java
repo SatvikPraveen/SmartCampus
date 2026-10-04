@@ -2,6 +2,8 @@
 
 package io;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import models.*;
 import repositories.*;
 import java.io.*;
@@ -33,19 +35,36 @@ public class BackupManager {
     private final EnrollmentRepository enrollmentRepository;
     private final DatabaseManager databaseManager;
     private final ExecutorService executorService;
+    // Per-entity tasks run on their own pool: backup jobs block on them, so sharing one bounded
+    // pool lets concurrent backup jobs occupy every thread and deadlock waiting for their subtasks.
+    private final ExecutorService entityExecutor;
+    private final Path backupBaseDir;
     
     public BackupManager(StudentRepository studentRepository,
                         ProfessorRepository professorRepository,
                         CourseRepository courseRepository,
                         DepartmentRepository departmentRepository,
                         EnrollmentRepository enrollmentRepository) {
+        this(studentRepository, professorRepository, courseRepository, departmentRepository,
+             enrollmentRepository, DatabaseManager.getInstance(), Paths.get(BACKUP_BASE_DIR));
+    }
+    
+    public BackupManager(StudentRepository studentRepository,
+                        ProfessorRepository professorRepository,
+                        CourseRepository courseRepository,
+                        DepartmentRepository departmentRepository,
+                        EnrollmentRepository enrollmentRepository,
+                        DatabaseManager databaseManager,
+                        Path backupBaseDir) {
         this.studentRepository = studentRepository;
         this.professorRepository = professorRepository;
         this.courseRepository = courseRepository;
         this.departmentRepository = departmentRepository;
         this.enrollmentRepository = enrollmentRepository;
-        this.databaseManager = DatabaseManager.getInstance();
+        this.databaseManager = databaseManager;
+        this.backupBaseDir = Objects.requireNonNull(backupBaseDir, "backupBaseDir");
         this.executorService = Executors.newFixedThreadPool(4);
+        this.entityExecutor = Executors.newFixedThreadPool(4);
         
         initializeBackupDirectories();
     }
@@ -55,9 +74,9 @@ public class BackupManager {
      */
     private void initializeBackupDirectories() {
         try {
-            Files.createDirectories(Paths.get(BACKUP_BASE_DIR, FULL_BACKUP_DIR));
-            Files.createDirectories(Paths.get(BACKUP_BASE_DIR, INCREMENTAL_BACKUP_DIR));
-            Files.createDirectories(Paths.get(BACKUP_BASE_DIR, DATABASE_BACKUP_DIR));
+            Files.createDirectories(backupBaseDir.resolve(FULL_BACKUP_DIR));
+            Files.createDirectories(backupBaseDir.resolve(INCREMENTAL_BACKUP_DIR));
+            Files.createDirectories(backupBaseDir.resolve(DATABASE_BACKUP_DIR));
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize backup directories", e);
         }
@@ -70,9 +89,9 @@ public class BackupManager {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
-                String backupName = "full_backup_" + timestamp;
-                Path backupDir = Paths.get(BACKUP_BASE_DIR, FULL_BACKUP_DIR, backupName);
-                Files.createDirectories(backupDir);
+                Path backupDir = createUniqueDirectory(backupBaseDir.resolve(FULL_BACKUP_DIR),
+                                                       "full_backup_" + timestamp);
+                String backupName = backupDir.getFileName().toString();
                 
                 long startTime = System.currentTimeMillis();
                 
@@ -131,9 +150,9 @@ public class BackupManager {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
-                String backupName = "incremental_backup_" + timestamp;
-                Path backupDir = Paths.get(BACKUP_BASE_DIR, INCREMENTAL_BACKUP_DIR, backupName);
-                Files.createDirectories(backupDir);
+                Path backupDir = createUniqueDirectory(backupBaseDir.resolve(INCREMENTAL_BACKUP_DIR),
+                                                       "incremental_backup_" + timestamp);
+                String backupName = backupDir.getFileName().toString();
                 
                 long startTime = System.currentTimeMillis();
                 
@@ -192,7 +211,7 @@ public class BackupManager {
             try {
                 String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
                 String backupName = "db_backup_" + timestamp + ".sql";
-                Path backupPath = Paths.get(BACKUP_BASE_DIR, DATABASE_BACKUP_DIR, backupName);
+                Path backupPath = backupBaseDir.resolve(DATABASE_BACKUP_DIR).resolve(backupName);
                 
                 long startTime = System.currentTimeMillis();
                 
@@ -232,6 +251,7 @@ public class BackupManager {
                 
                 // Extract backup if it's compressed
                 Path extractedDir = extractBackupArchive(backupPath);
+                try {
                 
                 // Load backup metadata
                 Path metadataFile = extractedDir.resolve("backup_metadata.json");
@@ -265,13 +285,14 @@ public class BackupManager {
                     restoreResults.put("enrollments", result);
                 }
                 
-                // Cleanup extracted directory
-                FileUtil.deleteDirectoryRecursively(extractedDir);
-                
                 long duration = System.currentTimeMillis() - startTime;
                 
                 return new RestoreResult(true, "Restore completed successfully", 
                                        restoreResults, duration, metadata);
+                } finally {
+                    // Cleanup extracted directory, also when the restore fails
+                    FileUtil.deleteDirectoryRecursively(extractedDir);
+                }
                 
             } catch (Exception e) {
                 return new RestoreResult(false, "Restore failed: " + e.getMessage(), 
@@ -287,19 +308,19 @@ public class BackupManager {
         List<BackupInfo> backups = new ArrayList<>();
         
         // List full backups
-        Path fullBackupDir = Paths.get(BACKUP_BASE_DIR, FULL_BACKUP_DIR);
+        Path fullBackupDir = backupBaseDir.resolve(FULL_BACKUP_DIR);
         if (Files.exists(fullBackupDir)) {
             backups.addAll(listBackupsInDirectory(fullBackupDir, BackupType.FULL));
         }
         
         // List incremental backups
-        Path incrementalBackupDir = Paths.get(BACKUP_BASE_DIR, INCREMENTAL_BACKUP_DIR);
+        Path incrementalBackupDir = backupBaseDir.resolve(INCREMENTAL_BACKUP_DIR);
         if (Files.exists(incrementalBackupDir)) {
             backups.addAll(listBackupsInDirectory(incrementalBackupDir, BackupType.INCREMENTAL));
         }
         
         // List database backups
-        Path databaseBackupDir = Paths.get(BACKUP_BASE_DIR, DATABASE_BACKUP_DIR);
+        Path databaseBackupDir = backupBaseDir.resolve(DATABASE_BACKUP_DIR);
         if (Files.exists(databaseBackupDir)) {
             backups.addAll(listBackupsInDirectory(databaseBackupDir, BackupType.DATABASE));
         }
@@ -419,7 +440,7 @@ public class BackupManager {
             } catch (Exception e) {
                 return new BackupEntityResult("students", false, 0, 0, e.getMessage());
             }
-        }, executorService);
+        }, entityExecutor);
     }
     
     private CompletableFuture<BackupEntityResult> backupProfessorsAsync(Path backupDir) {
@@ -433,7 +454,7 @@ public class BackupManager {
             } catch (Exception e) {
                 return new BackupEntityResult("professors", false, 0, 0, e.getMessage());
             }
-        }, executorService);
+        }, entityExecutor);
     }
     
     private CompletableFuture<BackupEntityResult> backupCoursesAsync(Path backupDir) {
@@ -447,7 +468,7 @@ public class BackupManager {
             } catch (Exception e) {
                 return new BackupEntityResult("courses", false, 0, 0, e.getMessage());
             }
-        }, executorService);
+        }, entityExecutor);
     }
     
     private CompletableFuture<BackupEntityResult> backupDepartmentsAsync(Path backupDir) {
@@ -461,7 +482,7 @@ public class BackupManager {
             } catch (Exception e) {
                 return new BackupEntityResult("departments", false, 0, 0, e.getMessage());
             }
-        }, executorService);
+        }, entityExecutor);
     }
     
     private CompletableFuture<BackupEntityResult> backupEnrollmentsAsync(Path backupDir) {
@@ -475,7 +496,7 @@ public class BackupManager {
             } catch (Exception e) {
                 return new BackupEntityResult("enrollments", false, 0, 0, e.getMessage());
             }
-        }, executorService);
+        }, entityExecutor);
     }
     
     private CompletableFuture<BackupEntityResult> backupStudentsIncrementalAsync(Path backupDir, Date sinceDate) {
@@ -490,7 +511,7 @@ public class BackupManager {
             } catch (Exception e) {
                 return new BackupEntityResult("students", false, 0, 0, e.getMessage());
             }
-        }, executorService);
+        }, entityExecutor);
     }
     
     private CompletableFuture<BackupEntityResult> backupEnrollmentsIncrementalAsync(Path backupDir, Date sinceDate) {
@@ -505,7 +526,7 @@ public class BackupManager {
             } catch (Exception e) {
                 return new BackupEntityResult("enrollments", false, 0, 0, e.getMessage());
             }
-        }, executorService);
+        }, entityExecutor);
     }
     
     // Private helper methods for restore operations
@@ -600,8 +621,9 @@ public class BackupManager {
     private Path createBackupArchive(Path backupDir, String backupName) throws IOException {
         Path archivePath = backupDir.getParent().resolve(backupName + ".zip");
         
-        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(archivePath))) {
-            Files.walk(backupDir)
+        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(archivePath));
+             var files = Files.walk(backupDir)) {
+            files
                  .filter(Files::isRegularFile)
                  .forEach(file -> {
                      try {
@@ -628,7 +650,11 @@ public class BackupManager {
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(archivePath))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                Path outputPath = extractDir.resolve(entry.getName());
+                Path outputPath = extractDir.resolve(entry.getName()).normalize();
+                // Reject entries that would escape the extraction directory ("zip slip")
+                if (!outputPath.startsWith(extractDir.normalize())) {
+                    throw new IOException("Backup entry is outside of the target directory: " + entry.getName());
+                }
                 
                 if (entry.isDirectory()) {
                     Files.createDirectories(outputPath);
@@ -641,6 +667,25 @@ public class BackupManager {
         }
         
         return extractDir;
+    }
+    
+    /**
+     * Atomically create a new directory named baseName (or baseName_N if taken) under parent, so
+     * that two backups started within the same second do not share and clobber one directory.
+     */
+    private static Path createUniqueDirectory(Path parent, String baseName) throws IOException {
+        Files.createDirectories(parent);
+        for (int attempt = 0; ; attempt++) {
+            Path candidate = parent.resolve(attempt == 0 ? baseName : baseName + "_" + attempt);
+            if (Files.exists(candidate.resolveSibling(candidate.getFileName() + ".zip"))) {
+                continue;
+            }
+            try {
+                return Files.createDirectory(candidate);
+            } catch (FileAlreadyExistsException e) {
+                // taken by a concurrent backup; try the next suffix
+            }
+        }
     }
     
     private List<BackupInfo> listBackupsInDirectory(Path directory, BackupType type) throws IOException {
@@ -670,13 +715,18 @@ public class BackupManager {
      * Shutdown backup manager
      */
     public void shutdown() {
+        entityExecutor.shutdown();
         executorService.shutdown();
         try {
             if (!executorService.awaitTermination(30, TimeUnit.SECONDS)) {
                 executorService.shutdownNow();
             }
+            if (!entityExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                entityExecutor.shutdownNow();
+            }
         } catch (InterruptedException e) {
             executorService.shutdownNow();
+            entityExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
@@ -739,8 +789,13 @@ public class BackupManager {
         private final long fileSize;
         private final String error;
         
-        public BackupEntityResult(String entityType, boolean success, int recordCount, 
-                                long fileSize, String error) {
+        // Creator lets backup_metadata.json (which embeds these results) be read back
+        @JsonCreator
+        public BackupEntityResult(@JsonProperty("entityType") String entityType,
+                                @JsonProperty("success") boolean success,
+                                @JsonProperty("recordCount") int recordCount, 
+                                @JsonProperty("fileSize") long fileSize,
+                                @JsonProperty("error") String error) {
             this.entityType = entityType;
             this.success = success;
             this.recordCount = recordCount;
@@ -784,8 +839,13 @@ public class BackupManager {
         private long duration;
         private Date basedOnDate; // For incremental backups
         
-        public BackupMetadata(String name, BackupType type, String timestamp,
-                            Map<String, BackupEntityResult> entityResults, long duration) {
+        // Creator lets backup_metadata.json be read back on restore/verification
+        @JsonCreator
+        public BackupMetadata(@JsonProperty("name") String name,
+                            @JsonProperty("type") BackupType type,
+                            @JsonProperty("timestamp") String timestamp,
+                            @JsonProperty("entityResults") Map<String, BackupEntityResult> entityResults,
+                            @JsonProperty("duration") long duration) {
             this.name = name;
             this.type = type;
             this.timestamp = timestamp;
