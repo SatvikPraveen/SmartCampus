@@ -416,8 +416,100 @@ class ModelInspectorTest {
         }
     }
 
+    static class Account {
+        @Validator(type = Type.NOT_BLANK, message = "username required", priority = 1, stopOnFailure = true)
+        @Validator(type = Type.MIN_LENGTH, min = 3, priority = 2)
+        @Validator(type = Type.ALPHANUMERIC, priority = 3)
+        String username;
+
+        @Validator(type = Type.EMAIL)
+        String email;
+
+        @Validator(type = Type.RANGE, min = 0, max = 120)
+        Integer age;
+
+        @Validator(type = Type.CUSTOM, validator = EvenNumber.class, message = "must be even")
+        int lucky;
+    }
+
+    static class AdminAccount extends Account {
+        @Validator(type = Type.NOT_EMPTY)
+        List<String> roles = new ArrayList<>();
+    }
+
+    public static class EvenNumber implements java.util.function.Predicate<Object> {
+        @Override
+        public boolean test(Object o) {
+            return o instanceof Integer i && i % 2 == 0;
+        }
+    }
+
+    private static Account account(String username, String email, Integer age, int lucky) {
+        Account a = new Account();
+        a.username = username;
+        a.email = email;
+        a.age = age;
+        a.lucky = lucky;
+        return a;
+    }
+
     @Nested
     class Validation {
+
+        // Regression: validateObject never applied any rule (the per-annotation check was an empty placeholder),
+        // and a field with two @Validator annotations was skipped because they arrive as one Validator.List.
+        @Test
+        void invalidObjectReportsEveryBrokenRuleIncludingRepeatedValidators() {
+            ValidationResult result = ModelInspector.validateObject(account("a!", "not-an-email", 150, 3));
+
+            assertThat(result.isValid()).isFalse();
+            assertThat(result.getErrors()).containsExactlyInAnyOrder(
+                    "username must be at least 3 characters",
+                    "username must be alphanumeric",
+                    "email must be a valid email",
+                    "age must be between 0 and 120",
+                    "must be even");
+        }
+
+        @Test
+        void validObjectPasses() {
+            ValidationResult result = ModelInspector.validateObject(account("ada42", "ada@campus.edu", 36, 4));
+
+            assertThat(result.getErrors()).isEmpty();
+            assertThat(result.isValid()).isTrue();
+        }
+
+        @Test
+        void stopOnFailureSkipsLowerPriorityRulesForThatField() {
+            ValidationResult result = ModelInspector.validateObject(account("  ", "ada@campus.edu", 36, 4));
+
+            assertThat(result.getErrors()).containsExactly("username required");
+        }
+
+        @Test
+        void nullOnlyFailsPresenceRules() {
+            ValidationResult result = ModelInspector.validateObject(account(null, null, null, 4));
+
+            assertThat(result.getErrors()).containsExactly("username required");
+        }
+
+        @Test
+        void inheritedFieldsAreValidated() {
+            AdminAccount admin = new AdminAccount();
+            admin.username = "root";
+            admin.lucky = 2;
+
+            ValidationResult result = ModelInspector.validateObject(admin);
+
+            assertThat(result.getErrors()).containsExactly("roles cannot be empty");
+        }
+
+        @Test
+        void invalidWidgetIsRejected() throws IOException {
+            ValidationResult result = ModelInspector.validateObject(Widget.of(""));
+
+            assertThat(result.getErrors()).containsExactly("name required");
+        }
 
         @Test
         void validateObjectVisitsAllFieldsWithoutErrorForValidObject() throws IOException {

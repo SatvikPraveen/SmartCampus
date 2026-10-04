@@ -366,40 +366,32 @@ public class ModelInspector {
     }
     
     /**
-     * Validates object using reflection and annotations
+     * Validates an object against the {@link Validator} annotations on its fields, including
+     * inherited fields and fields carrying several (repeated) validators.
      */
     public static ValidationResult validateObject(Object instance) {
         ValidationResult result = new ValidationResult();
-        ClassInfo classInfo = inspectClass(instance.getClass());
-        
-        for (FieldInfo fieldInfo : classInfo.getFields()) {
-            validateField(instance, fieldInfo, result);
-        }
-        
-        return result;
-    }
-    
-    /**
-     * Validates a single field
-     */
-    private static void validateField(Object instance, FieldInfo fieldInfo, ValidationResult result) {
-        Object fieldValue = getFieldValue(instance, fieldInfo.getName());
-        
-        for (AnnotationInfo annotation : fieldInfo.getAnnotations()) {
-            if (annotation.getType() == Validator.class) {
-                // Perform validation based on annotation attributes
-                // This is a simplified version
-                validateWithAnnotation(fieldInfo.getName(), fieldValue, annotation, result);
+        for (Class<?> c = instance.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field field : c.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
+                    continue;
+                }
+                Validator[] validators = field.getAnnotationsByType(Validator.class);
+                if (validators.length == 0) {
+                    continue;
+                }
+                Object value;
+                try {
+                    field.setAccessible(true);
+                    value = field.get(instance);
+                } catch (ReflectiveOperationException | RuntimeException e) {
+                    result.addError("Cannot access field: " + field.getName());
+                    continue;
+                }
+                ValidationRules.apply(field.getName(), value, validators, result::addError, result::addWarning);
             }
         }
-    }
-    
-    /**
-     * Validates field value with annotation
-     */
-    private static void validateWithAnnotation(String fieldName, Object value, AnnotationInfo annotation, ValidationResult result) {
-        // Implementation would check annotation attributes and validate accordingly
-        // This is a placeholder for actual validation logic
+        return result;
     }
     
     // ==================== DATA CLASSES ====================

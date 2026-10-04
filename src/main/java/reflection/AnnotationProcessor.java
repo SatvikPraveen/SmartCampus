@@ -268,9 +268,8 @@ public class AnnotationProcessor {
                 field.setAccessible(true);
                 Object fieldValue = field.get(instance);
                 
-                for (Validator validator : validators) {
-                    validateField(field.getName(), fieldValue, validator, result);
-                }
+                ValidationRules.apply(field.getName(), fieldValue, validators,
+                                      result::addError, result::addWarning);
             } catch (IllegalAccessException e) {
                 result.addError("Cannot access field: " + field.getName());
             }
@@ -279,79 +278,7 @@ public class AnnotationProcessor {
     
     private void processParameterValidation(Parameter parameter, Object value, ValidationResult result) {
         Validator[] validators = parameter.getAnnotationsByType(Validator.class);
-        for (Validator validator : validators) {
-            validateField(parameter.getName(), value, validator, result);
-        }
-    }
-    
-    private void validateField(String fieldName, Object value, Validator validator, ValidationResult result) {
-        switch (validator.type()) {
-            case NOT_NULL:
-                if (value == null) {
-                    result.addError(getValidationMessage(fieldName, "cannot be null", validator.message()));
-                }
-                break;
-            case NOT_EMPTY:
-                if (value == null || (value instanceof String && ((String) value).isEmpty()) ||
-                    (value instanceof Collection && ((Collection<?>) value).isEmpty())) {
-                    result.addError(getValidationMessage(fieldName, "cannot be empty", validator.message()));
-                }
-                break;
-            case MIN_LENGTH:
-                if (value instanceof String) {
-                    String strValue = (String) value;
-                    if (strValue.length() < validator.min()) {
-                        result.addError(getValidationMessage(fieldName, 
-                            "must be at least " + validator.min() + " characters", validator.message()));
-                    }
-                }
-                break;
-            case MAX_LENGTH:
-                if (value instanceof String) {
-                    String strValue = (String) value;
-                    if (strValue.length() > validator.max()) {
-                        result.addError(getValidationMessage(fieldName, 
-                            "must be at most " + validator.max() + " characters", validator.message()));
-                    }
-                }
-                break;
-            case EMAIL:
-                if (value instanceof String) {
-                    if (!isValidEmail((String) value)) {
-                        result.addError(getValidationMessage(fieldName, "must be a valid email", validator.message()));
-                    }
-                }
-                break;
-            case REGEX:
-                if (value instanceof String) {
-                    if (!((String) value).matches(validator.pattern())) {
-                        result.addError(getValidationMessage(fieldName, 
-                            "does not match required pattern", validator.message()));
-                    }
-                }
-                break;
-            case POSITIVE:
-                if (value instanceof Number) {
-                    if (((Number) value).doubleValue() <= 0) {
-                        result.addError(getValidationMessage(fieldName, "must be positive", validator.message()));
-                    }
-                }
-                break;
-            case CUSTOM:
-                // Handle custom validation
-                processCustomValidation(fieldName, value, validator, result);
-                break;
-        }
-    }
-    
-    private String getValidationMessage(String fieldName, String defaultMessage, String customMessage) {
-        return customMessage.isEmpty() ? fieldName + " " + defaultMessage : customMessage;
-    }
-    
-    private void processCustomValidation(String fieldName, Object value, Validator validator, ValidationResult result) {
-        // Implementation would invoke custom validator class
-        // This is a placeholder for custom validation logic
-        result.addWarning("Custom validation not implemented for field: " + fieldName);
+        ValidationRules.apply(parameter.getName(), value, validators, result::addError, result::addWarning);
     }
     
     // ==================== UTILITY METHODS ====================
@@ -398,9 +325,6 @@ public class AnnotationProcessor {
         return expression;
     }
     
-    private boolean isValidEmail(String email) {
-        return email != null && email.contains("@") && email.contains(".");
-    }
     
     // ==================== INNER CLASSES ====================
     
