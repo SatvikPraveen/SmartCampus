@@ -17,12 +17,12 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
     
     @Override
     protected String extractId(Department department) {
-        return department.getDepartmentCode();
+        return department.getDepartmentId();
     }
     
     @Override
     protected void setId(Department department, String id) {
-        // Department code is set during construction, this is for completeness
+        department.setDepartmentId(id);
     }
     
     @Override
@@ -36,7 +36,9 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      * Find department by department code
      */
     public Optional<Department> findByDepartmentCode(String departmentCode) {
-        return findById(departmentCode);
+        return findFirstByPredicate(department -> 
+            departmentCode.equals(department.getDepartmentCode())
+        );
     }
     
     /**
@@ -45,7 +47,7 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
     public List<Department> findByNameContaining(String namePattern) {
         String pattern = namePattern.toLowerCase();
         return findByPredicate(department -> 
-            department.getName().toLowerCase().contains(pattern)
+            department.getDepartmentName().toLowerCase().contains(pattern)
         );
     }
     
@@ -54,17 +56,18 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      */
     public Optional<Department> findByName(String name) {
         return findFirstByPredicate(department -> 
-            department.getName().equalsIgnoreCase(name)
+            department.getDepartmentName().equalsIgnoreCase(name)
         );
     }
     
     /**
-     * Find departments by head of department
+     * Find departments by head of department (professor ID)
      */
-    public List<Department> findByHeadOfDepartment(String headName) {
+    public List<Department> findByHeadOfDepartment(String headId) {
         return findByPredicate(department -> 
-            department.getHeadOfDepartment().toLowerCase()
-                    .contains(headName.toLowerCase())
+            department.getHeadOfDepartmentId() != null &&
+            department.getHeadOfDepartmentId().toLowerCase()
+                    .contains(headId.toLowerCase())
         );
     }
     
@@ -82,27 +85,30 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      * Find departments by establishment year
      */
     public List<Department> findByEstablishmentYear(int year) {
-        return findByPredicate(department -> 
-            department.getEstablishedYear() == year
-        );
+        return findByPredicate(department -> {
+            Integer established = establishedYearOf(department);
+            return established != null && established == year;
+        });
     }
     
     /**
      * Find departments established after a certain year
      */
     public List<Department> findEstablishedAfter(int year) {
-        return findByPredicate(department -> 
-            department.getEstablishedYear() > year
-        );
+        return findByPredicate(department -> {
+            Integer established = establishedYearOf(department);
+            return established != null && established > year;
+        });
     }
     
     /**
      * Find departments established before a certain year
      */
     public List<Department> findEstablishedBefore(int year) {
-        return findByPredicate(department -> 
-            department.getEstablishedYear() < year
-        );
+        return findByPredicate(department -> {
+            Integer established = establishedYearOf(department);
+            return established != null && established < year;
+        });
     }
     
     /**
@@ -110,8 +116,8 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      */
     public List<Department> findByEstablishmentYearRange(int startYear, int endYear) {
         return findByPredicate(department -> {
-            int year = department.getEstablishedYear();
-            return year >= startYear && year <= endYear;
+            Integer year = establishedYearOf(department);
+            return year != null && year >= startYear && year <= endYear;
         });
     }
     
@@ -157,8 +163,9 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      */
     public Map<Integer, List<Department>> groupByEstablishmentDecade() {
         return findAll().stream()
+                .filter(department -> establishedYearOf(department) != null)
                 .collect(Collectors.groupingBy(department -> 
-                    (department.getEstablishedYear() / 10) * 10
+                    (establishedYearOf(department) / 10) * 10
                 ));
     }
     
@@ -186,14 +193,15 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      * Get departments sorted by establishment year
      */
     public List<Department> findAllSortedByEstablishmentYear() {
-        return findAllSorted(Comparator.comparingInt(Department::getEstablishedYear));
+        return findAllSorted(Comparator.comparing(DepartmentRepository::establishedYearOf,
+                                                  Comparator.nullsLast(Comparator.naturalOrder())));
     }
     
     /**
      * Get departments sorted by name
      */
     public List<Department> findAllSortedByName() {
-        return findAllSorted(Comparator.comparing(Department::getName));
+        return findAllSorted(Comparator.comparing(Department::getDepartmentName));
     }
     
     /**
@@ -203,9 +211,10 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
         int currentYear = Calendar.getInstance().get(Calendar.YEAR);
         int cutoffYear = currentYear - years;
         
-        return findByPredicate(department -> 
-            department.getEstablishedYear() > cutoffYear
-        );
+        return findByPredicate(department -> {
+            Integer established = establishedYearOf(department);
+            return established != null && established > cutoffYear;
+        });
     }
     
     /**
@@ -213,7 +222,8 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      */
     public List<Department> findOldestDepartments(int count) {
         return findAll().stream()
-                .sorted(Comparator.comparingInt(Department::getEstablishedYear))
+                .filter(department -> establishedYearOf(department) != null)
+                .sorted(Comparator.comparingInt(DepartmentRepository::establishedYearOf))
                 .limit(count)
                 .collect(Collectors.toList());
     }
@@ -228,12 +238,13 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
             boolean matches = true;
             
             if (name != null && !name.trim().isEmpty()) {
-                matches &= department.getName().toLowerCase()
+                matches &= department.getDepartmentName().toLowerCase()
                           .contains(name.toLowerCase());
             }
             
             if (headOfDepartment != null && !headOfDepartment.trim().isEmpty()) {
-                matches &= department.getHeadOfDepartment().toLowerCase()
+                matches &= department.getHeadOfDepartmentId() != null &&
+                          department.getHeadOfDepartmentId().toLowerCase()
                           .contains(headOfDepartment.toLowerCase());
             }
             
@@ -243,7 +254,7 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
             }
             
             if (establishedYear != null) {
-                matches &= department.getEstablishedYear() == establishedYear;
+                matches &= establishedYear.equals(establishedYearOf(department));
             }
             
             if (minStudents != null) {
@@ -281,11 +292,15 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
                 .sum();
         
         OptionalInt oldestYear = departments.stream()
-                .mapToInt(Department::getEstablishedYear)
+                .map(DepartmentRepository::establishedYearOf)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
                 .min();
         
         OptionalInt newestYear = departments.stream()
-                .mapToInt(Department::getEstablishedYear)
+                .map(DepartmentRepository::establishedYearOf)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
                 .max();
         
         Map<String, Object> stats = new HashMap<>();
@@ -301,12 +316,13 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
     }
     
     /**
-     * Find departments by head name pattern
+     * Find departments by head of department ID pattern
      */
     public List<Department> findByHeadNameContaining(String headNamePattern) {
         String pattern = headNamePattern.toLowerCase();
         return findByPredicate(department -> 
-            department.getHeadOfDepartment().toLowerCase().contains(pattern)
+            department.getHeadOfDepartmentId() != null &&
+            department.getHeadOfDepartmentId().toLowerCase().contains(pattern)
         );
     }
     
@@ -315,7 +331,9 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      */
     public OptionalDouble getAverageEstablishmentYear() {
         return findAll().stream()
-                .mapToInt(Department::getEstablishedYear)
+                .map(DepartmentRepository::establishedYearOf)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
                 .average();
     }
     
@@ -328,5 +346,20 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
             int studentCount = department.getStudentCount();
             return Math.abs(studentCount - targetStudentCount) <= tolerance;
         });
+    }
+    
+    /**
+     * Parse the department's established year, or null if missing or not numeric
+     */
+    private static Integer establishedYearOf(Department department) {
+        String year = department.getEstablishedYear();
+        if (year == null || year.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(year.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

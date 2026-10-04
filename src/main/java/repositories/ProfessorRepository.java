@@ -18,12 +18,12 @@ public class ProfessorRepository extends BaseRepository<Professor, String> {
     
     @Override
     protected String extractId(Professor professor) {
-        return professor.getId();
+        return professor.getProfessorId();
     }
     
     @Override
     protected void setId(Professor professor, String id) {
-        // Professor ID is set during construction, this is for completeness
+        professor.setProfessorId(id);
     }
     
     @Override
@@ -38,8 +38,8 @@ public class ProfessorRepository extends BaseRepository<Professor, String> {
      */
     public List<Professor> findByDepartment(Department department) {
         return findByPredicate(professor -> 
-            professor.getDepartment() != null && 
-            professor.getDepartment().equals(department)
+            professor.getDepartmentId() != null && 
+            professor.getDepartmentId().equals(department.getDepartmentId())
         );
     }
     
@@ -97,7 +97,7 @@ public class ProfessorRepository extends BaseRepository<Professor, String> {
     public List<Professor> findByNameContaining(String namePattern) {
         String pattern = namePattern.toLowerCase();
         return findByPredicate(professor -> 
-            professor.getName().toLowerCase().contains(pattern)
+            professor.getFullName().toLowerCase().contains(pattern)
         );
     }
     
@@ -120,12 +120,12 @@ public class ProfessorRepository extends BaseRepository<Professor, String> {
     }
     
     /**
-     * Group professors by department
+     * Group professors by department ID
      */
-    public Map<Department, List<Professor>> groupByDepartment() {
+    public Map<String, List<Professor>> groupByDepartment() {
         return findAll().stream()
-                .filter(professor -> professor.getDepartment() != null)
-                .collect(Collectors.groupingBy(Professor::getDepartment));
+                .filter(professor -> professor.getDepartmentId() != null)
+                .collect(Collectors.groupingBy(Professor::getDepartmentId));
     }
     
     /**
@@ -137,25 +137,25 @@ public class ProfessorRepository extends BaseRepository<Professor, String> {
     }
     
     /**
-     * Get professor count by department
+     * Get professor count by department ID
      */
-    public Map<Department, Long> getProfessorCountByDepartment() {
+    public Map<String, Long> getProfessorCountByDepartment() {
         return findAll().stream()
-                .filter(professor -> professor.getDepartment() != null)
+                .filter(professor -> professor.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(
-                    Professor::getDepartment,
+                    Professor::getDepartmentId,
                     Collectors.counting()
                 ));
     }
     
     /**
-     * Get average experience by department
+     * Get average experience by department ID
      */
-    public Map<Department, Double> getAverageExperienceByDepartment() {
+    public Map<String, Double> getAverageExperienceByDepartment() {
         return findAll().stream()
-                .filter(professor -> professor.getDepartment() != null)
+                .filter(professor -> professor.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(
-                    Professor::getDepartment,
+                    Professor::getDepartmentId,
                     Collectors.averagingInt(Professor::getYearsOfExperience)
                 ));
     }
@@ -191,13 +191,13 @@ public class ProfessorRepository extends BaseRepository<Professor, String> {
             boolean matches = true;
             
             if (name != null && !name.trim().isEmpty()) {
-                matches &= professor.getName().toLowerCase()
+                matches &= professor.getFullName().toLowerCase()
                           .contains(name.toLowerCase());
             }
             
             if (department != null) {
-                matches &= professor.getDepartment() != null && 
-                          professor.getDepartment().equals(department);
+                matches &= professor.getDepartmentId() != null && 
+                          professor.getDepartmentId().equals(department.getDepartmentId());
             }
             
             if (specialization != null && !specialization.trim().isEmpty()) {

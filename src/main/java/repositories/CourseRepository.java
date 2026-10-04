@@ -19,12 +19,12 @@ public class CourseRepository extends BaseRepository<Course, String> {
     
     @Override
     protected String extractId(Course course) {
-        return course.getCourseCode();
+        return course.getCourseId();
     }
     
     @Override
     protected void setId(Course course, String id) {
-        // Course code is set during construction, this is for completeness
+        course.setCourseId(id);
     }
     
     @Override
@@ -39,8 +39,8 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findByDepartment(Department department) {
         return findByPredicate(course -> 
-            course.getDepartment() != null && 
-            course.getDepartment().equals(department)
+            course.getDepartmentId() != null && 
+            course.getDepartmentId().equals(department.getDepartmentId())
         );
     }
     
@@ -48,7 +48,9 @@ public class CourseRepository extends BaseRepository<Course, String> {
      * Find course by course code
      */
     public Optional<Course> findByCourseCode(String courseCode) {
-        return findById(courseCode);
+        return findFirstByPredicate(course -> 
+            courseCode.equals(course.getCourseCode())
+        );
     }
     
     /**
@@ -56,8 +58,8 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findByProfessor(Professor professor) {
         return findByPredicate(course -> 
-            course.getProfessor() != null && 
-            course.getProfessor().equals(professor)
+            course.getProfessorId() != null && 
+            course.getProfessorId().equals(professor.getProfessorId())
         );
     }
     
@@ -86,7 +88,7 @@ public class CourseRepository extends BaseRepository<Course, String> {
     public List<Course> findByNameContaining(String namePattern) {
         String pattern = namePattern.toLowerCase();
         return findByPredicate(course -> 
-            course.getName().toLowerCase().contains(pattern)
+            course.getCourseName().toLowerCase().contains(pattern)
         );
     }
     
@@ -114,7 +116,7 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findByAcademicYear(String academicYear) {
         return findByPredicate(course -> 
-            course.getAcademicYear().equals(academicYear)
+            String.valueOf(course.getYear()).equals(academicYear)
         );
     }
     
@@ -123,7 +125,7 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findByCapacityRange(int minCapacity, int maxCapacity) {
         return findByPredicate(course -> {
-            int capacity = course.getCapacity();
+            int capacity = course.getMaxEnrollment();
             return capacity >= minCapacity && capacity <= maxCapacity;
         });
     }
@@ -133,7 +135,7 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findCoursesWithAvailableSpots() {
         return findByPredicate(course -> 
-            course.getEnrolledStudents() < course.getCapacity()
+            course.getEnrolledStudentIds().size() < course.getMaxEnrollment()
         );
     }
     
@@ -142,7 +144,7 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findFullCourses() {
         return findByPredicate(course -> 
-            course.getEnrolledStudents() >= course.getCapacity()
+            course.getEnrolledStudentIds().size() >= course.getMaxEnrollment()
         );
     }
     
@@ -151,26 +153,26 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findByMinEnrollment(int minEnrollment) {
         return findByPredicate(course -> 
-            course.getEnrolledStudents() >= minEnrollment
+            course.getEnrolledStudentIds().size() >= minEnrollment
         );
     }
     
     /**
-     * Group courses by department
+     * Group courses by department ID
      */
-    public Map<Department, List<Course>> groupByDepartment() {
+    public Map<String, List<Course>> groupByDepartment() {
         return findAll().stream()
-                .filter(course -> course.getDepartment() != null)
-                .collect(Collectors.groupingBy(Course::getDepartment));
+                .filter(course -> course.getDepartmentId() != null)
+                .collect(Collectors.groupingBy(Course::getDepartmentId));
     }
     
     /**
-     * Group courses by professor
+     * Group courses by professor ID
      */
-    public Map<Professor, List<Course>> groupByProfessor() {
+    public Map<String, List<Course>> groupByProfessor() {
         return findAll().stream()
-                .filter(course -> course.getProfessor() != null)
-                .collect(Collectors.groupingBy(Course::getProfessor));
+                .filter(course -> course.getProfessorId() != null)
+                .collect(Collectors.groupingBy(Course::getProfessorId));
     }
     
     /**
@@ -182,38 +184,38 @@ public class CourseRepository extends BaseRepository<Course, String> {
     }
     
     /**
-     * Get course count by department
+     * Get course count by department ID
      */
-    public Map<Department, Long> getCourseCountByDepartment() {
+    public Map<String, Long> getCourseCountByDepartment() {
         return findAll().stream()
-                .filter(course -> course.getDepartment() != null)
+                .filter(course -> course.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(
-                    Course::getDepartment,
+                    Course::getDepartmentId,
                     Collectors.counting()
                 ));
     }
     
     /**
-     * Get total credits by department
+     * Get total credits by department ID
      */
-    public Map<Department, Integer> getTotalCreditsByDepartment() {
+    public Map<String, Integer> getTotalCreditsByDepartment() {
         return findAll().stream()
-                .filter(course -> course.getDepartment() != null)
+                .filter(course -> course.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(
-                    Course::getDepartment,
+                    Course::getDepartmentId,
                     Collectors.summingInt(Course::getCredits)
                 ));
     }
     
     /**
-     * Get average capacity by department
+     * Get average capacity by department ID
      */
-    public Map<Department, Double> getAverageCapacityByDepartment() {
+    public Map<String, Double> getAverageCapacityByDepartment() {
         return findAll().stream()
-                .filter(course -> course.getDepartment() != null)
+                .filter(course -> course.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(
-                    Course::getDepartment,
-                    Collectors.averagingInt(Course::getCapacity)
+                    Course::getDepartmentId,
+                    Collectors.averagingInt(Course::getMaxEnrollment)
                 ));
     }
     
@@ -228,18 +230,18 @@ public class CourseRepository extends BaseRepository<Course, String> {
             boolean matches = true;
             
             if (name != null && !name.trim().isEmpty()) {
-                matches &= course.getName().toLowerCase()
+                matches &= course.getCourseName().toLowerCase()
                           .contains(name.toLowerCase());
             }
             
             if (department != null) {
-                matches &= course.getDepartment() != null && 
-                          course.getDepartment().equals(department);
+                matches &= course.getDepartmentId() != null && 
+                          course.getDepartmentId().equals(department.getDepartmentId());
             }
             
             if (professor != null) {
-                matches &= course.getProfessor() != null && 
-                          course.getProfessor().equals(professor);
+                matches &= course.getProfessorId() != null && 
+                          course.getProfessorId().equals(professor.getProfessorId());
             }
             
             if (semester != null && !semester.trim().isEmpty()) {
@@ -247,7 +249,7 @@ public class CourseRepository extends BaseRepository<Course, String> {
             }
             
             if (academicYear != null && !academicYear.trim().isEmpty()) {
-                matches &= course.getAcademicYear().equals(academicYear);
+                matches &= String.valueOf(course.getYear()).equals(academicYear);
             }
             
             if (minCredits != null) {
@@ -266,18 +268,16 @@ public class CourseRepository extends BaseRepository<Course, String> {
      * Find prerequisite courses
      */
     public List<Course> findPrerequisites(Course course) {
-        // This would require a prerequisites field in Course model
-        // For now, return empty list as placeholder
-        return new ArrayList<>();
+        return findAllById(course.getPrerequisiteCourseIds());
     }
     
     /**
      * Find courses that have the given course as prerequisite
      */
     public List<Course> findCoursesWithPrerequisite(Course prerequisite) {
-        // This would require a prerequisites field in Course model
-        // For now, return empty list as placeholder
-        return new ArrayList<>();
+        return findByPredicate(course -> 
+            course.getPrerequisiteCourseIds().contains(prerequisite.getCourseId())
+        );
     }
     
     /**
@@ -287,11 +287,11 @@ public class CourseRepository extends BaseRepository<Course, String> {
         List<Course> courses = findAll();
         
         int totalCapacity = courses.stream()
-                .mapToInt(Course::getCapacity)
+                .mapToInt(Course::getMaxEnrollment)
                 .sum();
         
         int totalEnrolled = courses.stream()
-                .mapToInt(Course::getEnrolledStudents)
+                .mapToInt(course -> course.getEnrolledStudentIds().size())
                 .sum();
         
         double utilizationRate = totalCapacity > 0 ? 
@@ -312,9 +312,9 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findPopularCourses(double minUtilizationRate) {
         return findByPredicate(course -> {
-            if (course.getCapacity() == 0) return false;
-            double utilizationRate = (double) course.getEnrolledStudents() / 
-                                   course.getCapacity();
+            if (course.getMaxEnrollment() == 0) return false;
+            double utilizationRate = (double) course.getEnrolledStudentIds().size() / 
+                                   course.getMaxEnrollment();
             return utilizationRate >= (minUtilizationRate / 100.0);
         });
     }
@@ -324,9 +324,9 @@ public class CourseRepository extends BaseRepository<Course, String> {
      */
     public List<Course> findUnderutilizedCourses(double maxUtilizationRate) {
         return findByPredicate(course -> {
-            if (course.getCapacity() == 0) return true;
-            double utilizationRate = (double) course.getEnrolledStudents() / 
-                                   course.getCapacity();
+            if (course.getMaxEnrollment() == 0) return true;
+            double utilizationRate = (double) course.getEnrolledStudentIds().size() / 
+                                   course.getMaxEnrollment();
             return utilizationRate <= (maxUtilizationRate / 100.0);
         });
     }

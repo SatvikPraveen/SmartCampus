@@ -4,6 +4,9 @@ package repositories;
 
 import models.Student;
 import models.Department;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,13 +21,12 @@ public class StudentRepository extends BaseRepository<Student, String> {
     
     @Override
     protected String extractId(Student student) {
-        return student.getId();
+        return student.getStudentId();
     }
     
     @Override
     protected void setId(Student student, String id) {
-        // Student ID is set during construction, this is for completeness
-        // In a real scenario, you might use reflection or modify the Student class
+        student.setStudentId(id);
     }
     
     @Override
@@ -39,8 +41,8 @@ public class StudentRepository extends BaseRepository<Student, String> {
      */
     public List<Student> findByDepartment(Department department) {
         return findByPredicate(student -> 
-            student.getDepartment() != null && 
-            student.getDepartment().equals(department)
+            student.getDepartmentId() != null && 
+            student.getDepartmentId().equals(department.getDepartmentId())
         );
     }
     
@@ -59,7 +61,7 @@ public class StudentRepository extends BaseRepository<Student, String> {
     public List<Student> findByNameContaining(String namePattern) {
         String pattern = namePattern.toLowerCase();
         return findByPredicate(student -> 
-            student.getName().toLowerCase().contains(pattern)
+            student.getFullName().toLowerCase().contains(pattern)
         );
     }
     
@@ -67,21 +69,23 @@ public class StudentRepository extends BaseRepository<Student, String> {
      * Find students by enrollment year
      */
     public List<Student> findByEnrollmentYear(int year) {
-        return findByPredicate(student -> {
-            Calendar cal = Calendar.getInstance();
-            cal.setTime(student.getEnrollmentDate());
-            return cal.get(Calendar.YEAR) == year;
-        });
+        return findByPredicate(student -> 
+            student.getEnrollmentDate() != null &&
+            student.getEnrollmentDate().getYear() == year
+        );
     }
     
     /**
      * Find students enrolled between dates
      */
     public List<Student> findByEnrollmentDateBetween(Date startDate, Date endDate) {
+        LocalDate start = toLocalDate(startDate);
+        LocalDate end = toLocalDate(endDate);
         return findByPredicate(student -> {
-            Date enrollmentDate = student.getEnrollmentDate();
-            return enrollmentDate.compareTo(startDate) >= 0 && 
-                   enrollmentDate.compareTo(endDate) <= 0;
+            LocalDate enrollmentDate = student.getEnrollmentDate();
+            return enrollmentDate != null &&
+                   !enrollmentDate.isBefore(start) && 
+                   !enrollmentDate.isAfter(end);
         });
     }
     
@@ -89,10 +93,12 @@ public class StudentRepository extends BaseRepository<Student, String> {
      * Find students by multiple departments
      */
     public List<Student> findByDepartments(List<Department> departments) {
-        Set<Department> deptSet = new HashSet<>(departments);
+        Set<String> deptIds = departments.stream()
+                .map(Department::getDepartmentId)
+                .collect(Collectors.toSet());
         return findByPredicate(student -> 
-            student.getDepartment() != null && 
-            deptSet.contains(student.getDepartment())
+            student.getDepartmentId() != null && 
+            deptIds.contains(student.getDepartmentId())
         );
     }
     
@@ -100,32 +106,31 @@ public class StudentRepository extends BaseRepository<Student, String> {
      * Find active students (those with recent activity)
      */
     public List<Student> findActiveStudents() {
-        Calendar cal = Calendar.getInstance();
-        cal.add(Calendar.MONTH, -6); // Active within last 6 months
-        Date sixMonthsAgo = cal.getTime();
+        LocalDate sixMonthsAgo = LocalDate.now().minusMonths(6); // Active within last 6 months
         
         return findByPredicate(student -> 
-            student.getEnrollmentDate().after(sixMonthsAgo)
+            student.getEnrollmentDate() != null &&
+            student.getEnrollmentDate().isAfter(sixMonthsAgo)
         );
     }
     
     /**
-     * Get students grouped by department
+     * Get students grouped by department ID
      */
-    public Map<Department, List<Student>> groupByDepartment() {
+    public Map<String, List<Student>> groupByDepartment() {
         return findAll().stream()
-                .filter(student -> student.getDepartment() != null)
-                .collect(Collectors.groupingBy(Student::getDepartment));
+                .filter(student -> student.getDepartmentId() != null)
+                .collect(Collectors.groupingBy(Student::getDepartmentId));
     }
     
     /**
-     * Get students statistics by department
+     * Get students statistics by department ID
      */
-    public Map<Department, Long> getStudentCountByDepartment() {
+    public Map<String, Long> getStudentCountByDepartment() {
         return findAll().stream()
-                .filter(student -> student.getDepartment() != null)
+                .filter(student -> student.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(
-                    Student::getDepartment,
+                    Student::getDepartmentId,
                     Collectors.counting()
                 ));
     }
@@ -144,12 +149,9 @@ public class StudentRepository extends BaseRepository<Student, String> {
      */
     public Map<Integer, Long> getEnrollmentStatsByYear() {
         return findAll().stream()
+                .filter(student -> student.getEnrollmentDate() != null)
                 .collect(Collectors.groupingBy(
-                    student -> {
-                        Calendar cal = Calendar.getInstance();
-                        cal.setTime(student.getEnrollmentDate());
-                        return cal.get(Calendar.YEAR);
-                    },
+                    student -> student.getEnrollmentDate().getYear(),
                     Collectors.counting()
                 ));
     }
@@ -158,15 +160,14 @@ public class StudentRepository extends BaseRepository<Student, String> {
      * Find students enrolled in current academic year
      */
     public List<Student> findCurrentYearStudents() {
-        Calendar cal = Calendar.getInstance();
-        int currentYear = cal.get(Calendar.YEAR);
+        int currentYear = LocalDate.now().getYear();
         
         // Academic year typically starts in August/September
-        cal.set(currentYear, Calendar.AUGUST, 1);
-        Date academicYearStart = cal.getTime();
+        LocalDate academicYearStart = LocalDate.of(currentYear, 8, 1);
         
         return findByPredicate(student -> 
-            student.getEnrollmentDate().after(academicYearStart)
+            student.getEnrollmentDate() != null &&
+            student.getEnrollmentDate().isAfter(academicYearStart)
         );
     }
     
@@ -179,23 +180,23 @@ public class StudentRepository extends BaseRepository<Student, String> {
             boolean matches = true;
             
             if (name != null && !name.trim().isEmpty()) {
-                matches &= student.getName().toLowerCase()
+                matches &= student.getFullName().toLowerCase()
                           .contains(name.toLowerCase());
             }
             
             if (department != null) {
-                matches &= student.getDepartment() != null && 
-                          student.getDepartment().equals(department);
+                matches &= student.getDepartmentId() != null && 
+                          student.getDepartmentId().equals(department.getDepartmentId());
             }
             
             if (enrollmentDateFrom != null) {
-                matches &= student.getEnrollmentDate()
-                          .compareTo(enrollmentDateFrom) >= 0;
+                matches &= student.getEnrollmentDate() != null &&
+                          !student.getEnrollmentDate().isBefore(toLocalDate(enrollmentDateFrom));
             }
             
             if (enrollmentDateTo != null) {
-                matches &= student.getEnrollmentDate()
-                          .compareTo(enrollmentDateTo) <= 0;
+                matches &= student.getEnrollmentDate() != null &&
+                          !student.getEnrollmentDate().isAfter(toLocalDate(enrollmentDateTo));
             }
             
             return matches;
@@ -206,12 +207,15 @@ public class StudentRepository extends BaseRepository<Student, String> {
      * Get recent enrollments (last N days)
      */
     public List<Student> getRecentEnrollments(int days) {
-        Calendar cal = Calendar.getInstance();
-        cal.add(Calendar.DAY_OF_YEAR, -days);
-        Date cutoffDate = cal.getTime();
+        LocalDate cutoffDate = LocalDate.now().minusDays(days);
         
         return findByPredicate(student -> 
-            student.getEnrollmentDate().after(cutoffDate)
+            student.getEnrollmentDate() != null &&
+            student.getEnrollmentDate().isAfter(cutoffDate)
         );
+    }
+    
+    private static LocalDate toLocalDate(Date date) {
+        return Instant.ofEpochMilli(date.getTime()).atZone(ZoneId.systemDefault()).toLocalDate();
     }
 }

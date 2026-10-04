@@ -6,6 +6,10 @@ import models.Enrollment;
 import models.Student;
 import models.Course;
 import models.Department;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -14,24 +18,23 @@ import java.util.concurrent.atomic.AtomicLong;
  * Repository for Enrollment entity operations
  * Provides specialized queries for enrollment data access
  */
-public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
+public class EnrollmentRepository extends BaseRepository<Enrollment, String> {
     
     private final AtomicLong idGenerator = new AtomicLong(1);
     
     @Override
-    protected Long extractId(Enrollment enrollment) {
+    protected String extractId(Enrollment enrollment) {
         return enrollment.getEnrollmentId();
     }
     
     @Override
-    protected void setId(Enrollment enrollment, Long id) {
-        // Enrollment ID would need a setter in the Enrollment model
-        // This is for completeness
+    protected void setId(Enrollment enrollment, String id) {
+        enrollment.setEnrollmentId(id);
     }
     
     @Override
-    protected Long generateId() {
-        return idGenerator.getAndIncrement();
+    protected String generateId() {
+        return "ENR" + String.format("%06d", idGenerator.getAndIncrement());
     }
     
     // Specialized query methods for enrollments
@@ -41,8 +44,8 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      */
     public List<Enrollment> findByStudent(Student student) {
         return findByPredicate(enrollment -> 
-            enrollment.getStudent() != null && 
-            enrollment.getStudent().equals(student)
+            enrollment.getStudentId() != null && 
+            enrollment.getStudentId().equals(student.getStudentId())
         );
     }
     
@@ -51,8 +54,8 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      */
     public List<Enrollment> findByCourse(Course course) {
         return findByPredicate(enrollment -> 
-            enrollment.getCourse() != null && 
-            enrollment.getCourse().equals(course)
+            enrollment.getCourseId() != null && 
+            enrollment.getCourseId().equals(course.getCourseId())
         );
     }
     
@@ -61,10 +64,10 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      */
     public Optional<Enrollment> findByStudentAndCourse(Student student, Course course) {
         return findFirstByPredicate(enrollment -> 
-            enrollment.getStudent() != null && 
-            enrollment.getStudent().equals(student) &&
-            enrollment.getCourse() != null && 
-            enrollment.getCourse().equals(course)
+            enrollment.getStudentId() != null && 
+            enrollment.getStudentId().equals(student.getStudentId()) &&
+            enrollment.getCourseId() != null && 
+            enrollment.getCourseId().equals(course.getCourseId())
         );
     }
     
@@ -72,10 +75,13 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      * Find enrollments by enrollment date range
      */
     public List<Enrollment> findByEnrollmentDateBetween(Date startDate, Date endDate) {
+        LocalDateTime start = toLocalDateTime(startDate);
+        LocalDateTime end = toLocalDateTime(endDate);
         return findByPredicate(enrollment -> {
-            Date enrollmentDate = enrollment.getEnrollmentDate();
-            return enrollmentDate.compareTo(startDate) >= 0 && 
-                   enrollmentDate.compareTo(endDate) <= 0;
+            LocalDateTime enrollmentDate = enrollment.getEnrollmentDate();
+            return enrollmentDate != null &&
+                   !enrollmentDate.isBefore(start) && 
+                   !enrollmentDate.isAfter(end);
         });
     }
     
@@ -93,18 +99,18 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      */
     public List<Enrollment> findByAcademicYear(String academicYear) {
         return findByPredicate(enrollment -> 
-            enrollment.getAcademicYear().equals(academicYear)
+            academicYearOf(enrollment).equals(academicYear)
         );
     }
     
     /**
-     * Find enrollments by department
+     * Find enrollments in courses offered by the department
      */
     public List<Enrollment> findByDepartment(Department department) {
+        Set<String> departmentCourseIds = new HashSet<>(department.getCourseIds());
         return findByPredicate(enrollment -> 
-            enrollment.getCourse() != null &&
-            enrollment.getCourse().getDepartment() != null &&
-            enrollment.getCourse().getDepartment().equals(department)
+            enrollment.getCourseId() != null &&
+            departmentCourseIds.contains(enrollment.getCourseId())
         );
     }
     
@@ -112,12 +118,11 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      * Find recent enrollments (last N days)
      */
     public List<Enrollment> findRecentEnrollments(int days) {
-        Calendar cal = Calendar.getInstance();
-        cal.add(Calendar.DAY_OF_YEAR, -days);
-        Date cutoffDate = cal.getTime();
+        LocalDateTime cutoffDate = LocalDateTime.now().minusDays(days);
         
         return findByPredicate(enrollment -> 
-            enrollment.getEnrollmentDate().after(cutoffDate)
+            enrollment.getEnrollmentDate() != null &&
+            enrollment.getEnrollmentDate().isAfter(cutoffDate)
         );
     }
     
@@ -125,45 +130,42 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      * Find enrollments by enrollment year
      */
     public List<Enrollment> findByEnrollmentYear(int year) {
-        return findByPredicate(enrollment -> {
-            Calendar cal = Calendar.getInstance();
-            cal.setTime(enrollment.getEnrollmentDate());
-            return cal.get(Calendar.YEAR) == year;
-        });
+        return findByPredicate(enrollment -> 
+            enrollment.getEnrollmentDate() != null &&
+            enrollment.getEnrollmentDate().getYear() == year
+        );
     }
     
     /**
      * Find active enrollments (current semester/year)
      */
     public List<Enrollment> findActiveEnrollments() {
-        Calendar cal = Calendar.getInstance();
-        int currentYear = cal.get(Calendar.YEAR);
+        int currentYear = LocalDate.now().getYear();
         String currentSemester = getCurrentSemester();
         
         return findByPredicate(enrollment -> {
-            cal.setTime(enrollment.getEnrollmentDate());
-            int enrollmentYear = cal.get(Calendar.YEAR);
-            return enrollmentYear == currentYear || 
-                   enrollment.getSemester().equals(currentSemester);
+            LocalDateTime enrollmentDate = enrollment.getEnrollmentDate();
+            return (enrollmentDate != null && enrollmentDate.getYear() == currentYear) || 
+                   currentSemester.equals(enrollment.getSemester());
         });
     }
     
     /**
-     * Group enrollments by student
+     * Group enrollments by student ID
      */
-    public Map<Student, List<Enrollment>> groupByStudent() {
+    public Map<String, List<Enrollment>> groupByStudent() {
         return findAll().stream()
-                .filter(enrollment -> enrollment.getStudent() != null)
-                .collect(Collectors.groupingBy(Enrollment::getStudent));
+                .filter(enrollment -> enrollment.getStudentId() != null)
+                .collect(Collectors.groupingBy(Enrollment::getStudentId));
     }
     
     /**
-     * Group enrollments by course
+     * Group enrollments by course ID
      */
-    public Map<Course, List<Enrollment>> groupByCourse() {
+    public Map<String, List<Enrollment>> groupByCourse() {
         return findAll().stream()
-                .filter(enrollment -> enrollment.getCourse() != null)
-                .collect(Collectors.groupingBy(Enrollment::getCourse));
+                .filter(enrollment -> enrollment.getCourseId() != null)
+                .collect(Collectors.groupingBy(Enrollment::getCourseId));
     }
     
     /**
@@ -179,62 +181,38 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      */
     public Map<String, List<Enrollment>> groupByAcademicYear() {
         return findAll().stream()
-                .collect(Collectors.groupingBy(Enrollment::getAcademicYear));
+                .collect(Collectors.groupingBy(EnrollmentRepository::academicYearOf));
     }
     
     /**
-     * Group enrollments by department
+     * Get enrollment count by course ID
      */
-    public Map<Department, List<Enrollment>> groupByDepartment() {
+    public Map<String, Long> getEnrollmentCountByCourse() {
         return findAll().stream()
-                .filter(enrollment -> enrollment.getCourse() != null &&
-                                    enrollment.getCourse().getDepartment() != null)
-                .collect(Collectors.groupingBy(enrollment -> 
-                    enrollment.getCourse().getDepartment()));
-    }
-    
-    /**
-     * Get enrollment count by course
-     */
-    public Map<Course, Long> getEnrollmentCountByCourse() {
-        return findAll().stream()
-                .filter(enrollment -> enrollment.getCourse() != null)
+                .filter(enrollment -> enrollment.getCourseId() != null)
                 .collect(Collectors.groupingBy(
-                    Enrollment::getCourse,
+                    Enrollment::getCourseId,
                     Collectors.counting()
                 ));
     }
     
     /**
-     * Get enrollment count by department
+     * Get student course count (number of courses per student ID)
      */
-    public Map<Department, Long> getEnrollmentCountByDepartment() {
+    public Map<String, Long> getStudentCourseCount() {
         return findAll().stream()
-                .filter(enrollment -> enrollment.getCourse() != null &&
-                                    enrollment.getCourse().getDepartment() != null)
+                .filter(enrollment -> enrollment.getStudentId() != null)
                 .collect(Collectors.groupingBy(
-                    enrollment -> enrollment.getCourse().getDepartment(),
+                    Enrollment::getStudentId,
                     Collectors.counting()
                 ));
     }
     
     /**
-     * Get student course count (number of courses per student)
+     * Find IDs of students enrolled in multiple courses
      */
-    public Map<Student, Long> getStudentCourseCount() {
-        return findAll().stream()
-                .filter(enrollment -> enrollment.getStudent() != null)
-                .collect(Collectors.groupingBy(
-                    Enrollment::getStudent,
-                    Collectors.counting()
-                ));
-    }
-    
-    /**
-     * Find students enrolled in multiple courses
-     */
-    public List<Student> findStudentsWithMultipleCourses() {
-        Map<Student, Long> courseCounts = getStudentCourseCount();
+    public List<String> findStudentsWithMultipleCourses() {
+        Map<String, Long> courseCounts = getStudentCourseCount();
         return courseCounts.entrySet().stream()
                 .filter(entry -> entry.getValue() > 1)
                 .map(Map.Entry::getKey)
@@ -242,10 +220,10 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
     }
     
     /**
-     * Find courses with low enrollment
+     * Find IDs of courses with low enrollment
      */
-    public List<Course> findCoursesWithLowEnrollment(int threshold) {
-        Map<Course, Long> enrollmentCounts = getEnrollmentCountByCourse();
+    public List<String> findCoursesWithLowEnrollment(int threshold) {
+        Map<String, Long> enrollmentCounts = getEnrollmentCountByCourse();
         return enrollmentCounts.entrySet().stream()
                 .filter(entry -> entry.getValue() < threshold)
                 .map(Map.Entry::getKey)
@@ -253,10 +231,10 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
     }
     
     /**
-     * Find courses with high enrollment
+     * Find IDs of courses with high enrollment
      */
-    public List<Course> findCoursesWithHighEnrollment(int threshold) {
-        Map<Course, Long> enrollmentCounts = getEnrollmentCountByCourse();
+    public List<String> findCoursesWithHighEnrollment(int threshold) {
+        Map<String, Long> enrollmentCounts = getEnrollmentCountByCourse();
         return enrollmentCounts.entrySet().stream()
                 .filter(entry -> entry.getValue() >= threshold)
                 .map(Map.Entry::getKey)
@@ -271,11 +249,11 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
         
         long totalEnrollments = enrollments.size();
         long uniqueStudents = enrollments.stream()
-                .map(Enrollment::getStudent)
+                .map(Enrollment::getStudentId)
                 .distinct()
                 .count();
         long uniqueCourses = enrollments.stream()
-                .map(Enrollment::getCourse)
+                .map(Enrollment::getCourseId)
                 .distinct()
                 .count();
         
@@ -302,13 +280,13 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
             boolean matches = true;
             
             if (student != null) {
-                matches &= enrollment.getStudent() != null && 
-                          enrollment.getStudent().equals(student);
+                matches &= enrollment.getStudentId() != null && 
+                          enrollment.getStudentId().equals(student.getStudentId());
             }
             
             if (course != null) {
-                matches &= enrollment.getCourse() != null && 
-                          enrollment.getCourse().equals(course);
+                matches &= enrollment.getCourseId() != null && 
+                          enrollment.getCourseId().equals(course.getCourseId());
             }
             
             if (semester != null && !semester.trim().isEmpty()) {
@@ -316,17 +294,17 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
             }
             
             if (academicYear != null && !academicYear.trim().isEmpty()) {
-                matches &= enrollment.getAcademicYear().equals(academicYear);
+                matches &= academicYearOf(enrollment).equals(academicYear);
             }
             
             if (enrollmentDateFrom != null) {
-                matches &= enrollment.getEnrollmentDate()
-                          .compareTo(enrollmentDateFrom) >= 0;
+                matches &= enrollment.getEnrollmentDate() != null &&
+                          !enrollment.getEnrollmentDate().isBefore(toLocalDateTime(enrollmentDateFrom));
             }
             
             if (enrollmentDateTo != null) {
-                matches &= enrollment.getEnrollmentDate()
-                          .compareTo(enrollmentDateTo) <= 0;
+                matches &= enrollment.getEnrollmentDate() != null &&
+                          !enrollment.getEnrollmentDate().isAfter(toLocalDateTime(enrollmentDateTo));
             }
             
             return matches;
@@ -346,14 +324,11 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
      */
     public Map<String, Long> getEnrollmentTrendsByMonth() {
         return findAll().stream()
+                .filter(enrollment -> enrollment.getEnrollmentDate() != null)
                 .collect(Collectors.groupingBy(
-                    enrollment -> {
-                        Calendar cal = Calendar.getInstance();
-                        cal.setTime(enrollment.getEnrollmentDate());
-                        return String.format("%d-%02d", 
-                                           cal.get(Calendar.YEAR),
-                                           cal.get(Calendar.MONTH) + 1);
-                    },
+                    enrollment -> String.format("%d-%02d", 
+                                                enrollment.getEnrollmentDate().getYear(),
+                                                enrollment.getEnrollmentDate().getMonthValue()),
                     Collectors.counting()
                 ));
     }
@@ -388,5 +363,22 @@ public class EnrollmentRepository extends BaseRepository<Enrollment, Long> {
         } else {
             return (year - 1) + "-" + year;
         }
+    }
+    
+    /**
+     * Derive the academic year (e.g. "2024-2025") from the enrollment's semester and year.
+     * Fall terms open an academic year; Spring and Summer terms close it.
+     */
+    private static String academicYearOf(Enrollment enrollment) {
+        int year = enrollment.getYear();
+        String semester = enrollment.getSemester();
+        if (semester != null && semester.toLowerCase().contains("fall")) {
+            return year + "-" + (year + 1);
+        }
+        return (year - 1) + "-" + year;
+    }
+    
+    private static LocalDateTime toLocalDateTime(Date date) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(date.getTime()), ZoneId.systemDefault());
     }
 }
