@@ -2,6 +2,7 @@ package services;
 
 import interfaces.Enrollable.EnrollmentStatistics;
 import interfaces.Reportable.ReportData;
+import interfaces.Reportable.ReportFormat;
 import interfaces.Reportable.ReportType;
 import interfaces.Searchable.SearchCriteria;
 import interfaces.Searchable.SearchCriterion;
@@ -13,14 +14,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 class EnrollmentServiceTest {
 
@@ -490,5 +495,182 @@ class EnrollmentServiceTest {
 
         ReportData unsupported = service.generateReport(ReportType.GRADE_REPORT);
         assertThat(unsupported.getTitle()).isEqualTo("Unsupported Report Type");
+    }
+
+    @Nested
+    class SearchingByField {
+
+        @BeforeEach
+        void seed() {
+            enroll("ALICE", "CS101");
+            service.enrollStudent("BOB", "MATH200", "Spring", 2026);
+            service.addToWaitlist("CAROL", "CS101", SEM, YEAR);
+            enrollmentOf("ALICE", "CS101").setGrade(Enrollment.Grade.B_PLUS);
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "semester,EXACT_MATCH,spring,BOB",
+                "year,EXACT_MATCH,2025,ALICE;CAROL",
+                "status,EXACT_MATCH,waitlisted,CAROL",
+                "enrollmentType,CONTAINS,regular,ALICE;BOB;CAROL",
+                "grade,EXACT_MATCH,b_plus,ALICE",
+                "courseId,ENDS_WITH,200,BOB",
+                "enrollmentDate,CONTAINS,T,ALICE;BOB;CAROL",
+                "studentId,REGEX,.*,''"})
+        void criteriaOnEveryField(String field, SearchCriteria criteria, String value, String expected) {
+            Map<String, SearchCriterion> query = Map.of(field, new SearchCriterion(criteria, value));
+            List<String> students = service.search(query).stream().map(Enrollment::getStudentId).sorted().toList();
+
+            assertThat(String.join(";", students)).isEqualTo(expected);
+            assertThat(service.countSearchResults(query)).isEqualTo(students.size());
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "studentId,ASC,ALICE;BOB;CAROL",
+                "courseId,DESC,BOB",
+                "semester,DESC,BOB",
+                "year,DESC,BOB",
+                "status,DESC,CAROL"})
+        void sortByField(String sortBy, SortOrder order, String expectedPrefix) {
+            String students = String.join(";", service.searchAndSort("", sortBy, order).stream()
+                    .map(Enrollment::getStudentId).toList());
+            assertThat(students).startsWith(expectedPrefix);
+        }
+
+        @ParameterizedTest
+        @CsvSource({"enrollmentDate", "unknown"})
+        void sortByEnrollmentDateIsTheDefault(String sortBy) {
+            assertThat(service.searchAndSort("", sortBy, SortOrder.ASC))
+                    .hasSize(3)
+                    .isSortedAccordingTo(Comparator.comparing(Enrollment::getEnrollmentDate));
+        }
+
+        @Test
+        void sortByAdvertisedGradeField() {
+            // Regression: "grade" is advertised by getSortableFields() but the comparator
+            // silently fell back to sorting by enrollment date.
+            enrollmentOf("BOB", "MATH200").setGrade(Enrollment.Grade.A);
+            assertThat(service.getSortableFields()).contains("grade");
+
+            assertThat(service.searchAndSort("", "grade", SortOrder.ASC))
+                    .extracting(Enrollment::getStudentId).containsExactly("BOB", "ALICE", "CAROL");
+            assertThat(service.searchAndSort("", "grade", SortOrder.DESC))
+                    .extracting(Enrollment::getStudentId).containsExactly("CAROL", "ALICE", "BOB");
+        }
+
+        @Test
+        void advancedPagination() {
+            SearchResult<Enrollment> result = service.advancedSearchWithPagination(
+                    Map.of("enrollmentType", new SearchCriterion(SearchCriteria.EXACT_MATCH, "regular")),
+                    "studentId", SortOrder.DESC, 0, 2);
+
+            assertThat(result.getTotalElements()).isEqualTo(3);
+            assertThat(result.getResults()).extracting(Enrollment::getStudentId).containsExactly("CAROL", "BOB");
+            assertThat(result.getSortBy()).isEqualTo("studentId");
+            assertThat(service.advancedSearchWithPagination(Map.of(), "studentId", SortOrder.ASC, 1, 2).getResults())
+                    .extracting(Enrollment::getStudentId).containsExactly("CAROL");
+        }
+
+        @Test
+        void predicateSearchAndFilter() {
+            assertThat(service.search(e -> e.getYear() == 2026)).extracting(Enrollment::getStudentId).containsExactly("BOB");
+            assertThat(service.filter(e -> e.getStatus() == EnrollmentStatus.WAITLISTED)).hasSize(1);
+            assertThat(service.getEnrollmentsByType(Enrollment.EnrollmentType.REGULAR)).hasSize(3);
+            assertThat(service.getEnrollmentsByType(Enrollment.EnrollmentType.AUDIT)).isEmpty();
+            assertThat(service.getSearchableFields()).contains("grade", "year");
+        }
+
+        @Test
+        void reportShowsLetterGrade() {
+            ReportData report = service.generateReport(ReportType.ENROLLMENT_REPORT);
+
+            assertThat(report.getMetadata()).containsEntry("totalEnrollments", 3);
+            assertThat(report.getRows()).anySatisfy(row -> assertThat(row)
+                    .containsEntry("Student ID", "ALICE")
+                    .containsEntry("Grade", "B+")
+                    .containsEntry("Semester", "Fall 2025")
+                    .containsEntry("Status", "ENROLLED"));
+        }
+    }
+
+    @Nested
+    class Housekeeping {
+
+        @Test
+        void lookupAndStatusUpdates() {
+            enroll("S1", "CS101");
+            Enrollment e = enrollmentOf("S1", "CS101");
+
+            assertThat(service.getEnrollmentById(e.getEnrollmentId())).containsSame(e);
+            assertThat(service.getEnrollmentById("NOPE")).isEmpty();
+            assertThat(service.updateEnrollmentStatus("NOPE", EnrollmentStatus.COMPLETED)).isFalse();
+            assertThat(service.withdrawStudent("S1", "NOPE", "x")).isFalse();
+        }
+
+        @Test
+        void completedEnrollmentsNoLongerOccupySeats() {
+            service.setCourseLimit("CS101", 1);
+            complete("S1", "CS101");
+
+            assertThat(service.getCourseEnrollments("CS101")).isEmpty();
+            assertThat(service.hasAvailableSpots("CS101")).isTrue();
+            assertThat(enroll("S2", "CS101")).isTrue();
+        }
+
+        @Test
+        void processWaitlistSkipsWhenCourseIsFull() {
+            service.setCourseLimit("CS101", 1);
+            enroll("S1", "CS101");
+            service.addToWaitlist("W1", "CS101", SEM, YEAR);
+            service.addToWaitlist("W2", "CS101", SEM, YEAR);
+
+            assertThat(service.processWaitlist("CS101", 2)).isZero();
+            assertThat(service.getCurrentWaitlistCount("CS101")).isEqualTo(2);
+        }
+
+        @Test
+        void statisticsAreCachedAndCopied() {
+            enroll("S1", "CS101");
+            Map<String, Object> first = service.calculateOverallStatistics();
+            first.clear();
+
+            assertThat(service.getSummaryStatistics()).containsEntry("totalEnrollments", 1)
+                    .containsEntry("totalWaitlistCount", 0)
+                    .containsEntry("averageEnrollmentRate", 0.0);
+        }
+
+        @Test
+        void completionRateAndAverageEnrollmentRate() {
+            service.setCourseLimit("CS101", 4);
+            service.setCourseLimit("CS102", 2);
+            complete("S1", "CS101");
+            enroll("S2", "CS101");
+            enroll("S3", "CS102");
+
+            Map<String, Object> stats = service.calculateOverallStatistics();
+            assertThat((double) stats.get("completionRate")).isCloseTo(100.0 / 3, within(1e-9));
+            assertThat(stats).containsEntry("averageEnrollmentRate", (25.0 + 50.0) / 2);
+        }
+
+        @Test
+        void statisticalSummaryAndReportingMetadata() {
+            enroll("S1", "CS101");
+
+            ReportData summary = service.generateReportForDateRange(ReportType.STATISTICAL_SUMMARY,
+                    LocalDateTime.now().minusDays(1), LocalDateTime.now());
+            assertThat(summary.getTitle()).isEqualTo("Enrollment Statistical Summary");
+            assertThat(summary.getContent()).contains("totalEnrollments: 1");
+
+            assertThat(service.getAvailableReportTypes())
+                    .containsExactly(ReportType.ENROLLMENT_REPORT, ReportType.STATISTICAL_SUMMARY);
+            assertThat(service.getSupportedFormats()).contains(ReportFormat.PDF);
+            assertThat(service.scheduleRecurringReport(ReportType.ENROLLMENT_REPORT, "weekly", List.of()))
+                    .startsWith("SCHED_ENR_");
+            assertThat(service.cancelScheduledReport("x")).isTrue();
+            assertThat(service.getReportHistory(ReportType.ENROLLMENT_REPORT, 2)).isEmpty();
+            assertThat(service.exportReport(summary, ReportFormat.JSON, "x.json")).isTrue();
+        }
     }
 }

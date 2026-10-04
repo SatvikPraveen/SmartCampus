@@ -19,7 +19,16 @@ import services.AuthService.PermissionLevel;
 import services.AuthService.Session;
 
 import java.lang.reflect.Field;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -400,6 +409,244 @@ class AuthServiceTest {
                 auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD);
             }
             assertThat(auth.getRecentAuditEvents(3)).hasSize(3);
+        }
+
+        @Test
+        void searchByUserOrEntityToleratesSystemRecords() {
+            // Regression: bootstrap and failed-login records carry a null userId/entityId, and
+            // searchAuditLogs dereferenced them, throwing a NullPointerException.
+            auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD);
+            auth.authenticateWithToken("SES_bogus");
+
+            assertThat(auth.searchAuditLogs(Map.of("userId", ADMIN_ID)))
+                    .isNotEmpty()
+                    .allSatisfy(r -> assertThat(r.getUserId()).isEqualTo(ADMIN_ID));
+            assertThat(auth.searchAuditLogs(Map.of("entityId", ADMIN_ID, "action", "LOGIN")))
+                    .singleElement()
+                    .satisfies(r -> assertThat(r.getDetails()).isEqualTo("Authentication successful"));
+            assertThat(auth.searchAuditLogs(Map.of("ignoredKey", "x"))).hasSameSizeAs(auth.getRecentAuditEvents(1000));
+        }
+
+        @Test
+        void auditRecordsCarryUserNames() {
+            auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD);
+            auth.logAuditEvent(AuditAction.READ, "E1", "GHOST", "lookup");
+            auth.logAuditEvent(AuditAction.READ, "E2", null, "anonymous");
+
+            assertThat(auth.getUserAuditHistory(ADMIN_ID)).last()
+                    .satisfies(r -> assertThat(r.getUserName()).isEqualTo("System Administrator"));
+            assertThat(auth.getAuditHistory("E1")).singleElement().satisfies(r -> {
+                assertThat(r.getUserName()).isEqualTo("Unknown User");
+                assertThat(r.getLevel()).isEqualTo(AuditLevel.INFO);
+            });
+            assertThat(auth.getAuditHistory("E2")).singleElement()
+                    .satisfies(r -> assertThat(r.getUserName()).isEqualTo("Unknown"));
+        }
+
+        @Test
+        void historyByDateRangeAndPurge() {
+            LocalDateTime before = LocalDateTime.now().minusMinutes(1);
+            auth.logAuditEvent(AuditAction.READ, "E1", ADMIN_ID, "first");
+            LocalDateTime after = LocalDateTime.now().plusMinutes(1);
+
+            assertThat(auth.getAuditHistory("E1", before, after)).hasSize(1);
+            assertThat(auth.getAuditHistory("E1", after, after.plusMinutes(1))).isEmpty();
+
+            int total = auth.getRecentAuditEvents(1000).size();
+            assertThat(auth.archiveAuditRecords(after)).isZero();
+            assertThat(auth.purgeAuditRecords(before)).isZero();
+            assertThat(auth.purgeAuditRecords(after)).isEqualTo(total);
+            assertThat(auth.getAuditStatistics()).containsEntry("totalRecords", 0);
+            assertThat(auth.exportAuditLogs(before, after, "csv", "unused.csv")).isTrue();
+        }
+
+        @Test
+        void statisticsCountSecurityAndErrorEvents() {
+            auth.authenticate(ADMIN_EMAIL, "bad");
+            auth.logAuditEvent(AuditAction.OTHER, AuditLevel.ERROR, "E1", null, "boom");
+
+            Map<String, Object> stats = auth.getAuditStatistics();
+            assertThat((long) stats.get("securityEvents")).isGreaterThanOrEqualTo(1L);
+            assertThat(stats).containsEntry("errorEvents", 1L);
+        }
+
+        @Test
+        void concurrentAuditingLosesNoRecords() throws Exception {
+            // Regression: audit records were kept in a plain ArrayList, so concurrent logins
+            // (or any concurrent audit writes) could lose records or corrupt the list, and
+            // readers streaming the list could fail with ConcurrentModificationException.
+            int writers = 8;
+            int eventsPerWriter = 500;
+            int initial = auth.getRecentAuditEvents(Integer.MAX_VALUE).size();
+            ExecutorService pool = Executors.newFixedThreadPool(writers + 1);
+            CountDownLatch start = new CountDownLatch(1);
+            AtomicBoolean writing = new AtomicBoolean(true);
+            try {
+                List<Future<?>> futures = new ArrayList<>();
+                for (int w = 0; w < writers; w++) {
+                    String entity = "E" + w;
+                    futures.add(pool.submit(() -> {
+                        start.await();
+                        for (int i = 0; i < eventsPerWriter; i++) {
+                            auth.logAuditEvent(AuditAction.READ, entity, null, "event " + i);
+                        }
+                        return null;
+                    }));
+                }
+                Future<?> reader = pool.submit(() -> {
+                    start.await();
+                    while (writing.get()) {
+                        auth.getAuditHistoryByAction(AuditAction.READ);
+                        auth.getRecentAuditEvents(5);
+                    }
+                    return null;
+                });
+
+                start.countDown();
+                for (Future<?> f : futures) {
+                    f.get(30, TimeUnit.SECONDS);
+                }
+                writing.set(false);
+                reader.get(30, TimeUnit.SECONDS);
+            } finally {
+                pool.shutdownNow();
+            }
+
+            assertThat(auth.getAuditStatistics()).containsEntry("totalRecords", initial + writers * eventsPerWriter);
+            for (int w = 0; w < writers; w++) {
+                assertThat(auth.getAuditHistory("E" + w)).hasSize(eventsPerWriter);
+            }
+        }
+    }
+
+    @Nested
+    class LockoutAndTokens {
+
+        @SuppressWarnings("unchecked")
+        private Map<String, LocalDateTime> lockouts() throws ReflectiveOperationException {
+            Field field = AuthService.class.getDeclaredField("accountLockouts");
+            field.setAccessible(true);
+            return (Map<String, LocalDateTime>) field.get(auth);
+        }
+
+        @Test
+        void lockoutExpiresAfterThirtyMinutes() throws ReflectiveOperationException {
+            for (int i = 0; i < 3; i++) {
+                auth.authenticate(ADMIN_EMAIL, "bad");
+            }
+            assertThat(auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD).getResult()).isEqualTo(AuthResult.ACCOUNT_LOCKED);
+
+            // Simulate the lockout having started 31 minutes ago.
+            lockouts().put(ADMIN_EMAIL, LocalDateTime.now().minusMinutes(31));
+
+            assertThat(auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD).isSuccess()).isTrue();
+            assertThat(auth.getAuditStatistics()).containsEntry("lockedAccounts", 0);
+        }
+
+        @Test
+        void lockoutStillActiveJustBeforeExpiry() throws ReflectiveOperationException {
+            for (int i = 0; i < 3; i++) {
+                auth.authenticate(ADMIN_EMAIL, "bad");
+            }
+            lockouts().put(ADMIN_EMAIL, LocalDateTime.now().minusMinutes(29));
+
+            assertThat(auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD).getResult()).isEqualTo(AuthResult.ACCOUNT_LOCKED);
+        }
+
+        @Test
+        void tokenOfDisabledAccountIsRejected() {
+            // Regression: authenticateWithToken never re-checked the account, so a session
+            // created before the account was disabled kept authenticating successfully.
+            Student s = register(student("S1"));
+            String token = login(s).getSession().getSessionToken();
+            s.setActive(false);
+
+            AuthenticationResult result = auth.authenticateWithToken(token);
+            assertThat(result.getResult()).isEqualTo(AuthResult.ACCOUNT_DISABLED);
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getSession()).isNull();
+            assertThat(auth.getSession(token)).as("session is terminated").isEmpty();
+        }
+
+        @Test
+        void sessionMetadata() {
+            Session session = auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD).getSession();
+
+            assertThat(session.getSessionToken()).startsWith("SES_");
+            assertThat(session.getCreatedAt()).isBeforeOrEqualTo(session.getLastAccessAt());
+            assertThat(session.getAgeMinutes()).isZero();
+            assertThat(session.getIdleMinutes()).isZero();
+            assertThat(session.toString()).contains(session.getSessionToken(), ADMIN_ID, "valid=true");
+
+            LocalDateTime lastAccess = session.getLastAccessAt();
+            auth.authenticateWithToken(session.getSessionToken());
+            assertThat(session.getLastAccessAt()).isAfterOrEqualTo(lastAccess);
+        }
+
+        @Test
+        void authenticationResultDescribesItself() {
+            AuthenticationResult ok = auth.authenticate(ADMIN_EMAIL, ADMIN_PASSWORD);
+            AuthenticationResult bad = auth.authenticate("ghost@campus.edu", "pw");
+
+            assertThat(ok.getMessage()).isEqualTo("Authentication successful");
+            assertThat(ok.toString()).contains("SUCCESS", "hasSession=true", ADMIN_ID);
+            assertThat(bad.getMessage()).isEqualTo("User not found");
+            assertThat(bad.toString()).contains("USER_NOT_FOUND", "hasSession=false", "user=null");
+        }
+
+        @Test
+        void enumsExposeDisplayNames() {
+            assertThat(AuthResult.TOO_MANY_ATTEMPTS.getMessage()).isEqualTo("Too many failed login attempts");
+            assertThat(AuthService.SessionStatus.EXPIRED.getDisplayName()).isEqualTo("Expired");
+            assertThat(PermissionLevel.SUPER_ADMIN.getDisplayName()).isEqualTo("Super Admin");
+        }
+    }
+
+    @Nested
+    class MoreAuthorization {
+
+        @Test
+        void systemAdminHasEveryPermission() {
+            register(admin("A1", Admin.AdminLevel.SYSTEM_ADMIN));
+            for (PermissionLevel level : PermissionLevel.values()) {
+                assertThat(auth.hasPermission("A1", "anything", level)).as(level.name()).isTrue();
+            }
+        }
+
+        @Test
+        void juniorAdminCannotActAsSuperAdmin() {
+            register(admin("A1", Admin.AdminLevel.JUNIOR_ADMIN));
+            assertThat(auth.hasPermission("A1", "anything", PermissionLevel.SUPER_ADMIN)).isFalse();
+        }
+
+        @Test
+        void professorsAndAdminsCanAccessStudentsCoursesAndGrades() {
+            register(professor("P1"));
+            register(admin("A1", Admin.AdminLevel.JUNIOR_ADMIN));
+
+            for (String type : List.of("student", "course", "grade")) {
+                assertThat(auth.canAccess("P1", type, "X1", "write")).as("professor " + type).isTrue();
+                assertThat(auth.canAccess("A1", type, "X1", "write")).as("admin " + type).isTrue();
+            }
+            assertThat(auth.canAccess("A1", "professor", "P1", "write")).isTrue();
+            assertThat(auth.canAccess("S404", "student", "S404", "read")).isFalse();
+        }
+
+        @Test
+        void studentsMayReadButNotWriteGrades() {
+            register(student("S1"));
+            assertThat(auth.canAccess("S1", "grade", "G1", "read")).isTrue();
+        }
+
+        @Test
+        void accessDecisionsAreAudited() {
+            register(student("S1"));
+            auth.canAccess("S1", "student", "S2", "read");
+
+            assertThat(auth.getAuditHistory("S2")).singleElement().satisfies(r -> {
+                assertThat(r.getLevel()).isEqualTo(AuditLevel.SECURITY);
+                assertThat(r.getDetails()).isEqualTo("Access denied for student S2 action read");
+            });
         }
     }
 }

@@ -2,6 +2,7 @@ package services;
 
 import interfaces.Enrollable.EnrollmentStatistics;
 import interfaces.Reportable.ReportData;
+import interfaces.Reportable.ReportFormat;
 import interfaces.Reportable.ReportType;
 import interfaces.Searchable.SearchCriteria;
 import interfaces.Searchable.SearchCriterion;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
@@ -422,5 +424,197 @@ class CourseServiceTest {
         assertThat(service.calculateOverallStatistics())
                 .containsEntry("totalCourses", 0)
                 .containsEntry("totalEnrollments", 0);
+    }
+
+    @Test
+    void enrollmentRateExtremesAreZeroWithoutActiveCourses() {
+        // Regression: DoubleSummaryStatistics reports +/-Infinity as min/max of an empty set,
+        // which leaked into the statistics.
+        addCourse("CS101", 10).setActive(false);
+
+        assertThat(service.calculateOverallStatistics())
+                .containsEntry("activeCourses", 0)
+                .containsEntry("minEnrollmentRate", 0.0)
+                .containsEntry("maxEnrollmentRate", 0.0)
+                .containsEntry("averageEnrollmentRate", 0.0);
+    }
+
+    @Test
+    void updateWithoutIdReturnsFalse() {
+        // Regression: updateCourse looked up a null ID in a ConcurrentHashMap and threw a
+        // NullPointerException instead of reporting failure.
+        assertThat(service.updateCourse(new Course())).isFalse();
+    }
+
+    @Nested
+    class Searching {
+
+        private Course algorithms;
+        private Course calculus;
+        private Course seminar;
+
+        @BeforeEach
+        void seed() {
+            algorithms = course("CS301", "CS", 4, 2);
+            algorithms.setCourseName("Algorithms");
+            calculus = course("MA201", "MATH", 3, 4);
+            calculus.setCourseName("Calculus");
+            calculus.setDifficultyLevel(DifficultyLevel.ADVANCED);
+            seminar = course("CS399", "CS", 1, 10);
+            seminar.setCourseName("Seminar");
+            seminar.setStatus(CourseStatus.OPEN);
+            service.addCourse(algorithms);
+            service.addCourse(calculus);
+            service.addCourse(seminar);
+            enroll("S1", "CS301");       // 50%
+            enroll("S1", "MA201");       // 25%
+        }
+
+        @Test
+        void keywordSearchToleratesCoursesWithoutDescription() {
+            // Regression: search dereferenced the optional description and threw a
+            // NullPointerException as soon as any course had none.
+            seminar.setDescription(null);
+
+            assertThat(service.search("seminar")).containsExactly(seminar);
+            assertThat(service.search("algo")).containsExactly(algorithms);
+            assertThat(service.countSearchResults("about")).isEqualTo(2);
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "courseName,EXACT_MATCH,calculus,MA201",
+                "courseCode,ENDS_WITH,99,CS399",
+                "description,CONTAINS,about cs3,CS301;CS399",
+                "description,STARTS_WITH,about,CS301;CS399;MA201",
+                "departmentId,EXACT_MATCH,math,MA201",
+                "status,CONTAINS,open,CS399",
+                "difficultyLevel,STARTS_WITH,adv,MA201",
+                "creditHours,EXACT_MATCH,1,CS399",
+                "maxEnrollment,EXACT_MATCH,10,CS399",
+                "enrollmentRate,EXACT_MATCH,50.0,CS301",
+                "courseName,REGEX,.*,''",
+                "unknown,CONTAINS,x,''"})
+        void criteriaOnEveryField(String field, SearchCriteria criteria, String value, String expectedIds) {
+            Map<String, SearchCriterion> query = Map.of(field, new SearchCriterion(criteria, value));
+            List<String> ids = service.search(query).stream().map(Course::getCourseId).sorted().toList();
+
+            assertThat(String.join(";", ids)).isEqualTo(expectedIds);
+            assertThat(service.countSearchResults(query)).isEqualTo(ids.size());
+        }
+
+        @Test
+        void emptyCriteriaMatchEverything() {
+            assertThat(service.search(Map.<String, SearchCriterion>of())).hasSize(3);
+            assertThat(service.findCoursesByCriteria(Map.of())).hasSize(3);
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "courseName,ASC,CS301;MA201;CS399",
+                "courseCode,DESC,MA201;CS399;CS301",
+                "creditHours,ASC,CS399;MA201;CS301",
+                "enrollmentRate,DESC,CS301;MA201;CS399",
+                "departmentId,DESC,MA201",
+                "maxEnrollment,ASC,CS301;MA201;CS399",
+                "status,DESC,CS399",
+                "unknown,ASC,CS301;CS399;MA201"})
+        void sortByField(String sortBy, SortOrder order, String expectedPrefix) {
+            String ids = String.join(";", service.searchAndSort("", sortBy, order).stream()
+                    .map(Course::getCourseId).toList());
+            assertThat(ids).startsWith(expectedPrefix);
+        }
+
+        @Test
+        void pagination() {
+            var page = service.searchWithPagination("cs", 0, 2);
+            assertThat(page.getTotalElements()).isEqualTo(2);
+            assertThat(page.getResults()).hasSize(2);
+
+            var advanced = service.advancedSearchWithPagination(
+                    Map.of("departmentId", new SearchCriterion(SearchCriteria.EXACT_MATCH, "cs")),
+                    "courseName", SortOrder.DESC, 0, 1);
+            assertThat(advanced.getTotalElements()).isEqualTo(2);
+            assertThat(advanced.getResults()).containsExactly(seminar);
+            assertThat(advanced.getSortOrder()).isEqualTo(SortOrder.DESC);
+
+            assertThat(service.advancedSearchWithPagination(Map.of(), "courseCode", SortOrder.ASC, 1, 2)
+                    .getResults()).containsExactly(calculus);
+        }
+
+        @Test
+        void predicateSearchFilterAndSuggestions() {
+            assertThat(service.search(c -> c.getCredits() > 3)).containsExactly(algorithms);
+            assertThat(service.filter(c -> c.getDifficultyLevel() == DifficultyLevel.ADVANCED)).containsExactly(calculus);
+            assertThat(service.filterCourses(c -> true)).hasSize(3);
+
+            assertThat(service.getSearchSuggestions("cs3", 10)).containsExactlyInAnyOrder("CS301", "CS399");
+            assertThat(service.getSearchSuggestions("c", 2)).hasSize(2);
+            assertThat(service.getSearchableFields()).contains("courseName", "creditHours");
+            assertThat(service.getSortableFields()).contains("enrollmentRate", "status");
+        }
+    }
+
+    @Nested
+    class Reporting {
+
+        @BeforeEach
+        void seed() {
+            addCourse("CS101", 4);
+            Course hard = addCourse("CS401", 2);
+            hard.setDifficultyLevel(DifficultyLevel.ADVANCED);
+            enroll("S1", "CS401");
+        }
+
+        @Test
+        void courseEvaluationReport() {
+            ReportData report = service.generateReport(ReportType.COURSE_EVALUATION_REPORT);
+
+            assertThat(report.getTitle()).isEqualTo("Course Evaluation Report");
+            assertThat(report.getRows()).hasSize(2);
+            assertThat(report.getRows()).anySatisfy(row -> assertThat(row)
+                    .containsEntry("Course Code", "CS401")
+                    .containsEntry("Difficulty", DifficultyLevel.ADVANCED.toString())
+                    .containsEntry("Credits", 3)
+                    .containsEntry("Enrollment Rate", "50.0%"));
+            assertThat(report.getMetadata()).containsEntry("totalCourses", 2);
+        }
+
+        @Test
+        void statisticsAreCachedUntilAMutation() {
+            Map<String, Object> first = service.calculateOverallStatistics();
+            first.clear();
+            assertThat(service.getSummaryStatistics())
+                    .containsEntry("totalCourses", 2)
+                    .containsEntry("maxEnrollmentRate", 50.0)
+                    .containsEntry("minEnrollmentRate", 0.0)
+                    .containsEntry("averageCreditHours", 3.0)
+                    .containsEntry("totalCreditHours", 6L)
+                    .containsEntry("waitlistTotal", 0);
+
+            service.addToWaitlist("W1", "CS101", SEM, YEAR);
+            assertThat(service.calculateOverallStatistics()).containsEntry("waitlistTotal", 1);
+        }
+
+        @Test
+        void unsupportedTypeAndMetadata() {
+            assertThat(service.generateReport(ReportType.GRADE_REPORT).getContent()).isEqualTo("Report type not supported");
+            assertThat(service.generateReportForDateRange(ReportType.ENROLLMENT_REPORT,
+                    LocalDateTime.now().minusDays(1), LocalDateTime.now()).getRows()).hasSize(2);
+            assertThat(service.getAvailableReportTypes()).containsExactly(ReportType.ENROLLMENT_REPORT,
+                    ReportType.COURSE_EVALUATION_REPORT, ReportType.STATISTICAL_SUMMARY);
+            assertThat(service.getSupportedFormats()).contains(ReportFormat.EXCEL);
+            assertThat(service.scheduleRecurringReport(ReportType.ENROLLMENT_REPORT, "daily", List.of()))
+                    .startsWith("SCHED_COURSE_");
+            assertThat(service.cancelScheduledReport("x")).isTrue();
+            assertThat(service.getReportHistory(ReportType.ENROLLMENT_REPORT, 1)).isEmpty();
+            assertThat(service.exportReport(null, ReportFormat.CSV, "x.csv")).isTrue();
+        }
+
+        @Test
+        void completedEnrollmentsAreCountedInStatistics() {
+            service.getCourseEnrollments("CS401").get(0).setStatus(EnrollmentStatus.COMPLETED);
+            assertThat(service.getEnrollmentStatistics("CS401").getCompleted()).isEqualTo(1);
+        }
     }
 }
