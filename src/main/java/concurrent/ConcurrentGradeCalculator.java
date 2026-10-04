@@ -8,7 +8,6 @@ import repositories.EnrollmentRepository;
 import repositories.StudentRepository;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.DoubleAdder;
 import java.util.function.DoublePredicate;
 import java.util.stream.Collectors;
 
@@ -535,65 +534,66 @@ public class ConcurrentGradeCalculator {
         }
         
         private DepartmentStatisticsResult computeDirectly() {
-            Map<String, List<Double>> courseGrades = new HashMap<>();
+            Map<String, double[]> courseTotals = new HashMap<>();
             Map<String, Long> gradeDistribution = new HashMap<>();
-            DoubleAdder totalGrade = new DoubleAdder();
-            int count = 0;
+            double totalGrade = 0.0;
             
             for (int i = start; i < end; i++) {
                 Enrollment grade = grades.get(i);
                 
-                courseGrades.computeIfAbsent(grade.getCourseId(), k -> new ArrayList<>())
-                           .add(grade.getNumericGrade());
+                double[] totals = courseTotals.computeIfAbsent(grade.getCourseId(), k -> new double[2]);
+                totals[0] += grade.getNumericGrade();
+                totals[1]++;
                 
                 gradeDistribution.merge(letterOf(grade), 1L, Long::sum);
-                totalGrade.add(grade.getNumericGrade());
-                count++;
+                totalGrade += grade.getNumericGrade();
             }
             
-            Map<String, Double> courseAverages = courseGrades.entrySet().stream()
-                .collect(Collectors.toMap(
-                    Map.Entry::getKey,
-                    entry -> entry.getValue().stream().mapToDouble(Double::doubleValue).average().orElse(0.0)
-                ));
-            
-            double overallAverage = count > 0 ? totalGrade.sum() / count : 0.0;
-            
-            return new DepartmentStatisticsResult(courseAverages, overallAverage, gradeDistribution);
+            return new DepartmentStatisticsResult(courseTotals, totalGrade, end - start, gradeDistribution);
         }
         
+        // Partial results carry sums and counts (not averages) so that merging halves of
+        // different sizes yields the exact, count-weighted average.
         private DepartmentStatisticsResult mergeResults(DepartmentStatisticsResult left, 
                                                        DepartmentStatisticsResult right) {
-            Map<String, Double> mergedCourseAverages = new HashMap<>(left.getCourseAverages());
-            right.getCourseAverages().forEach((course, avg) -> 
-                mergedCourseAverages.merge(course, avg, (v1, v2) -> (v1 + v2) / 2));
-            
-            double mergedOverallAverage = (left.getOverallAverage() + right.getOverallAverage()) / 2;
+            Map<String, double[]> mergedCourseTotals = new HashMap<>();
+            left.courseTotals.forEach((course, totals) -> mergedCourseTotals.put(course, totals.clone()));
+            right.courseTotals.forEach((course, totals) -> 
+                mergedCourseTotals.merge(course, totals.clone(),
+                    (a, b) -> new double[] { a[0] + b[0], a[1] + b[1] }));
             
             Map<String, Long> mergedGradeDistribution = new HashMap<>(left.getGradeDistribution());
             right.getGradeDistribution().forEach((grade, count) -> 
                 mergedGradeDistribution.merge(grade, count, Long::sum));
             
-            return new DepartmentStatisticsResult(mergedCourseAverages, mergedOverallAverage, 
+            return new DepartmentStatisticsResult(mergedCourseTotals,
+                                                left.totalGrade + right.totalGrade,
+                                                left.count + right.count,
                                                 mergedGradeDistribution);
         }
     }
     
     private static class DepartmentStatisticsResult {
-        private final Map<String, Double> courseAverages;
-        private final double overallAverage;
+        private final Map<String, double[]> courseTotals; // courseId -> {sum, count}
+        private final double totalGrade;
+        private final long count;
         private final Map<String, Long> gradeDistribution;
         
-        public DepartmentStatisticsResult(Map<String, Double> courseAverages,
-                                        double overallAverage,
+        public DepartmentStatisticsResult(Map<String, double[]> courseTotals,
+                                        double totalGrade, long count,
                                         Map<String, Long> gradeDistribution) {
-            this.courseAverages = courseAverages;
-            this.overallAverage = overallAverage;
+            this.courseTotals = courseTotals;
+            this.totalGrade = totalGrade;
+            this.count = count;
             this.gradeDistribution = gradeDistribution;
         }
         
-        public Map<String, Double> getCourseAverages() { return courseAverages; }
-        public double getOverallAverage() { return overallAverage; }
+        public Map<String, Double> getCourseAverages() {
+            Map<String, Double> averages = new HashMap<>();
+            courseTotals.forEach((course, totals) -> averages.put(course, totals[0] / totals[1]));
+            return averages;
+        }
+        public double getOverallAverage() { return count > 0 ? totalGrade / count : 0.0; }
         public Map<String, Long> getGradeDistribution() { return gradeDistribution; }
     }
 }
