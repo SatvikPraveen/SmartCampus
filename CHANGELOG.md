@@ -35,7 +35,7 @@ documented project, and adds a course-timetabling research engine.
   Dependabot, issue and PR templates
 - Test suite of 4,107 tests covering the scheduling engine, the API and every domain package
   (models, enums, services, io, events, concurrent, patterns, reflection, exceptions,
-  interfaces, utils, cache, security, repositories, functional, app), 93% overall line
+  interfaces, utils, cache, security, repositories, functional, app), 94% overall line
   coverage, with a JaCoCo coverage gate on the engine
 
 ### Fixed
