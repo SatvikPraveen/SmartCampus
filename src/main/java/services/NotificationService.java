@@ -790,7 +790,7 @@ public class NotificationService implements EventListener<Object> {
         for (NotificationType type : NotificationType.values()) {
             preferences.setChannelEnabled(type, DeliveryChannel.IN_APP, true);
             preferences.setChannelEnabled(type, DeliveryChannel.EMAIL, type == NotificationType.ACADEMIC || type == NotificationType.ALERT);
-            preferences.setChannelEnabled(type, DeliveryChannel.SMS, type == NotificationType.EMERGENCY || type == NotificationType.CRITICAL);
+            preferences.setChannelEnabled(type, DeliveryChannel.SMS, type == NotificationType.EMERGENCY);
         }
         
         return preferences;

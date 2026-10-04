@@ -891,7 +891,7 @@ public class StudentService implements Searchable<Student>, Reportable {
         
         List<String> columns = Arrays.asList("Metric", "Value");
         List<Map<String, Object>> rows = statistics.entrySet().stream()
-                .map(entry -> Map.of("Metric", entry.getKey(), "Value", entry.getValue().toString()))
+                .map(entry -> Map.<String, Object>of("Metric", entry.getKey(), "Value", entry.getValue().toString()))
                 .collect(Collectors.toList());
         
         return new ReportData(reportId, ReportType.PERFORMANCE_REPORT, "Student Performance Report", 

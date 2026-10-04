@@ -223,7 +223,14 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
                 .filter(enrollment -> enrollment.getStatus() == EnrollmentStatus.ENROLLED)
                 .collect(Collectors.toList());
     }
-    
+
+    /**
+     * Get all enrollment records managed by this service, regardless of status.
+     */
+    public List<Enrollment> getAllEnrollments() {
+        return new ArrayList<>(enrollments.values());
+    }
+
     @Override
     public int getCurrentEnrollmentCount(String courseId) {
         return getCourseEnrollments(courseId).size();

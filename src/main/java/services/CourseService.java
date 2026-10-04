@@ -41,28 +41,28 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     private final Map<String, List<Enrollment>> courseEnrollments; // courseId -> enrollments
     private final Map<String, String> courseInstructors; // courseId -> professorId
     private final Map<String, List<String>> coursePrerequisites; // courseId -> prerequisite courseIds
-    private final Map<String, Integer> enrollmentCounts;
+    private final Map<String, Integer> enrollmentCounts = new ConcurrentHashMap<>();
     private final Map<String, Integer> waitlistCounts;
     
     // Lambda expressions for common operations
     private final Function<Course, String> courseToString = course -> 
-        String.format("%s: %s (%d credits)", course.getCourseCode(), course.getCourseName(), course.getCreditHours());
+        String.format("%s: %s (%d credits)", course.getCourseCode(), course.getCourseName(), course.getCredits());
     
     private final Predicate<Course> isActiveCourse = course -> 
-        course.getStatus() == CourseStatus.ACTIVE;
+        course.isActive();
     
     private final Predicate<Course> hasAvailableSeats = course -> 
-        enrollmentCounts.getOrDefault(course.getCourseId(), 0) < course.getMaxEnrollment();
+        this.enrollmentCounts.getOrDefault(course.getCourseId(), 0) < course.getMaxEnrollment();
     
     private final Function<Course, Double> calculateEnrollmentRate = course -> {
-        int enrolled = enrollmentCounts.getOrDefault(course.getCourseId(), 0);
+        int enrolled = this.enrollmentCounts.getOrDefault(course.getCourseId(), 0);
         return course.getMaxEnrollment() > 0 ? (enrolled * 100.0) / course.getMaxEnrollment() : 0.0;
     };
     
     // Comparators using lambda expressions
     private final Comparator<Course> byCourseName = (c1, c2) -> c1.getCourseName().compareTo(c2.getCourseName());
     private final Comparator<Course> byCourseCode = Comparator.comparing(Course::getCourseCode);
-    private final Comparator<Course> byCreditHours = Comparator.comparing(Course::getCreditHours);
+    private final Comparator<Course> byCreditHours = Comparator.comparing(Course::getCredits);
     private final Comparator<Course> byEnrollmentRate = Comparator.comparing(calculateEnrollmentRate);
     
     // Statistics cache
@@ -77,7 +77,6 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
         this.courseEnrollments = new ConcurrentHashMap<>();
         this.courseInstructors = new ConcurrentHashMap<>();
         this.coursePrerequisites = new ConcurrentHashMap<>();
-        this.enrollmentCounts = new ConcurrentHashMap<>();
         this.waitlistCounts = new ConcurrentHashMap<>();
         this.cachedStatistics = new HashMap<>();
         this.lastStatisticsUpdate = LocalDateTime.now();
@@ -228,7 +227,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
      */
     public List<Course> getCoursesByCreditRange(int minCredits, int maxCredits) {
         return courses.values().stream()
-                .filter(course -> course.getCreditHours() >= minCredits && course.getCreditHours() <= maxCredits)
+                .filter(course -> course.getCredits() >= minCredits && course.getCredits() <= maxCredits)
                 .sorted(byCreditHours.thenComparing(byCourseCode))
                 .collect(Collectors.toList());
     }
@@ -322,7 +321,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     public Map<Integer, Long> getCreditHourDistribution() {
         return courses.values().stream()
                 .collect(Collectors.groupingBy(
-                    Course::getCreditHours,
+                    Course::getCredits,
                     Collectors.counting()
                 ));
     }
@@ -345,7 +344,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
                 .summaryStatistics();
         
         IntSummaryStatistics creditStats = activeCourses.stream()
-                .mapToInt(Course::getCreditHours)
+                .mapToInt(Course::getCredits)
                 .summaryStatistics();
         
         // Build statistics map using lambda expressions
@@ -921,9 +920,9 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
             "departmentid", Course::getDepartmentId,
             "status", Course::getStatus,
             "difficultylevel", Course::getDifficultyLevel,
-            "credithours", Course::getCreditHours,
+            "credithours", Course::getCredits,
             "maxenrollment", Course::getMaxEnrollment,
-            "enrollmentrate", calculateEnrollmentRate
+            "enrollmentrate", calculateEnrollmentRate::apply
         );
         
         return fieldExtractors.getOrDefault(field.toLowerCase(), c -> null).apply(course);
@@ -1037,7 +1036,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
                     row.put("Course Name", course.getCourseName());
                     row.put("Status", course.getStatus().toString());
                     row.put("Difficulty", course.getDifficultyLevel().toString());
-                    row.put("Credits", course.getCreditHours());
+                    row.put("Credits", course.getCredits());
                     row.put("Enrollment Rate", String.format("%.1f%%", calculateEnrollmentRate.apply(course)));
                     return row;
                 })

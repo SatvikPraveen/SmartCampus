@@ -37,7 +37,7 @@ public class SearchService {
     private final GradeService gradeService;
     
     // Search indices and caching
-    private final Map<String, List<SearchResult<?>>> searchCache;
+    private final Map<String, List<Searchable.SearchResult<?>>> searchCache;
     private final Map<String, Set<String>> searchIndex;
     private final Map<Class<?>, Searchable<?>> searchableServices;
     
@@ -168,10 +168,10 @@ public class SearchService {
         Map<String, List<FuzzyMatch<?>>> fuzzyResults = new HashMap<>();
         
         // Perform fuzzy matching for each entity type
-        fuzzyResults.put("students", fuzzySearchStudents(query, threshold));
-        fuzzyResults.put("professors", fuzzySearchProfessors(query, threshold));
-        fuzzyResults.put("courses", fuzzySearchCourses(query, threshold));
-        fuzzyResults.put("departments", fuzzySearchDepartments(query, threshold));
+        fuzzyResults.put("students", new ArrayList<>(fuzzySearchStudents(query, threshold)));
+        fuzzyResults.put("professors", new ArrayList<>(fuzzySearchProfessors(query, threshold)));
+        fuzzyResults.put("courses", new ArrayList<>(fuzzySearchCourses(query, threshold)));
+        fuzzyResults.put("departments", new ArrayList<>(fuzzySearchDepartments(query, threshold)));
         
         return new FuzzySearchResult(query, threshold, fuzzyResults);
     }
@@ -429,8 +429,7 @@ public class SearchService {
             department.getDepartmentName(),
             department.getDepartmentCode(),
             department.getDepartmentId(),
-            department.getCollege(),
-            department.getType().toString()
+            Objects.toString(department.getLocation(), "")
         );
     }
     
@@ -493,17 +492,14 @@ public class SearchService {
         if (criteria.getCourseStatus() != null && !criteria.getCourseStatus().equals(course.getStatus())) {
             return false;
         }
-        if (criteria.getMinCreditHours() != null && course.getCreditHours() < criteria.getMinCreditHours()) {
+        if (criteria.getMinCreditHours() != null && course.getCredits() < criteria.getMinCreditHours()) {
             return false;
         }
         return true;
     }
     
     private boolean matchesDepartmentCriteria(Department department, AdvancedSearchCriteria criteria) {
-        if (criteria.getCollege() != null && !criteria.getCollege().equals(department.getCollege())) {
-            return false;
-        }
-        if (criteria.getDepartmentType() != null && !criteria.getDepartmentType().equals(department.getType())) {
+        if (criteria.getLocation() != null && !criteria.getLocation().equals(department.getLocation())) {
             return false;
         }
         return true;
@@ -670,7 +666,7 @@ public class SearchService {
         } else if (entity instanceof Course) {
             return ((Course) entity).getDepartmentId();
         } else if (entity instanceof Department) {
-            return ((Department) entity).getCollege();
+            return ((Department) entity).getLocation();
         }
         return "unknown";
     }
@@ -1002,8 +998,7 @@ public class SearchService {
         private Integer minCreditHours;
         
         // Department-specific criteria
-        private String college;
-        private Department.DepartmentType departmentType;
+        private String location;
         
         // Enrollment-specific criteria
         private String semester;
@@ -1072,13 +1067,8 @@ public class SearchService {
             return this;
         }
         
-        public AdvancedSearchCriteria withCollege(String college) {
-            this.college = college;
-            return this;
-        }
-        
-        public AdvancedSearchCriteria withDepartmentType(Department.DepartmentType departmentType) {
-            this.departmentType = departmentType;
+        public AdvancedSearchCriteria withLocation(String location) {
+            this.location = location;
             return this;
         }
         
@@ -1155,8 +1145,7 @@ public class SearchService {
         public Double getMinTeachingRating() { return minTeachingRating; }
         public Course.CourseStatus getCourseStatus() { return courseStatus; }
         public Integer getMinCreditHours() { return minCreditHours; }
-        public String getCollege() { return college; }
-        public Department.DepartmentType getDepartmentType() { return departmentType; }
+        public String getLocation() { return location; }
         public String getSemester() { return semester; }
         public Integer getYear() { return year; }
         public Enrollment.EnrollmentStatus getEnrollmentStatus() { return enrollmentStatus; }

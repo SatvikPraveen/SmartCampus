@@ -154,18 +154,6 @@ public class DepartmentService implements Searchable<Department>, Reportable {
     }
     
     /**
-     * Get departments by type using Stream API.
-     * 
-     * @param type The department type to filter by
-     * @return List of departments of the specified type
-     */
-    public List<Department> getDepartmentsByType(Department.DepartmentType type) {
-        return departments.values().stream()
-                .filter(department -> type.equals(department.getType()))
-                .collect(Collectors.toList());
-    }
-    
-    /**
      * Get departments with enrollment above threshold using Stream API.
      * 
      * @param threshold The minimum enrollment threshold
@@ -199,19 +187,6 @@ public class DepartmentService implements Searchable<Department>, Reportable {
     public List<Department> getDepartmentsWithGraduatePrograms() {
         return departments.values().stream()
                 .filter(department -> !department.getGraduatePrograms().isEmpty())
-                .collect(Collectors.toList());
-    }
-    
-    /**
-     * Get departments by college using Stream API.
-     * 
-     * @param college The college name to filter by
-     * @return List of departments in the specified college
-     */
-    public List<Department> getDepartmentsByCollege(String college) {
-        return departments.values().stream()
-                .filter(department -> college.equalsIgnoreCase(department.getCollege()))
-                .sorted(Comparator.comparing(Department::getDepartmentName))
                 .collect(Collectors.toList());
     }
     
@@ -399,45 +374,6 @@ public class DepartmentService implements Searchable<Department>, Reportable {
     // Statistical operations using Stream API
     
     /**
-     * Get enrollment statistics by department type using Stream API.
-     * 
-     * @return Map of department type to total enrollment
-     */
-    public Map<Department.DepartmentType, Integer> getEnrollmentStatisticsByType() {
-        return departments.values().stream()
-                .collect(Collectors.groupingBy(
-                    Department::getType,
-                    Collectors.summingInt(Department::getTotalEnrollment)
-                ));
-    }
-    
-    /**
-     * Get department distribution by college using Stream API.
-     * 
-     * @return Map of college to department count
-     */
-    public Map<String, Long> getDepartmentDistributionByCollege() {
-        return departments.values().stream()
-                .collect(Collectors.groupingBy(
-                    Department::getCollege,
-                    Collectors.counting()
-                ));
-    }
-    
-    /**
-     * Get average enrollment by department type using Stream API.
-     * 
-     * @return Map of department type to average enrollment
-     */
-    public Map<Department.DepartmentType, Double> getAverageEnrollmentByType() {
-        return departments.values().stream()
-                .collect(Collectors.groupingBy(
-                    Department::getType,
-                    Collectors.averagingDouble(Department::getTotalEnrollment)
-                ));
-    }
-    
-    /**
      * Calculate faculty-to-student ratios using Stream API.
      * 
      * @return Map of department ID to faculty-to-student ratio
@@ -459,22 +395,22 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         Map<String, Object> stats = new HashMap<>();
         
         long totalUndergraduatePrograms = departments.values().stream()
-                .mapToLong(dept -> dept.getUndergraduatePrograms().size())
+                .mapToLong(dept -> dept.getMajorPrograms().size())
                 .sum();
         
         long totalGraduatePrograms = departments.values().stream()
                 .mapToLong(dept -> dept.getGraduatePrograms().size())
                 .sum();
         
-        Map<String, Long> programsByType = departments.values().stream()
+        Map<String, Long> programsByDepartment = departments.values().stream()
                 .collect(Collectors.groupingBy(
-                    dept -> dept.getType().toString(),
-                    Collectors.summingLong(dept -> dept.getUndergraduatePrograms().size() + dept.getGraduatePrograms().size())
+                    Department::getDepartmentCode,
+                    Collectors.summingLong(dept -> dept.getMajorPrograms().size() + dept.getGraduatePrograms().size())
                 ));
         
         stats.put("totalUndergraduatePrograms", totalUndergraduatePrograms);
         stats.put("totalGraduatePrograms", totalGraduatePrograms);
-        stats.put("programsByDepartmentType", programsByType);
+        stats.put("programsByDepartment", programsByDepartment);
         
         return stats;
     }
@@ -502,10 +438,6 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         statistics.put("averageEnrollment", enrollmentStats.getAverage());
         statistics.put("maxEnrollment", enrollmentStats.getMax());
         statistics.put("minEnrollment", enrollmentStats.getMin());
-        statistics.put("departmentsByType", getDepartmentCountByType());
-        statistics.put("departmentsByCollege", getDepartmentDistributionByCollege());
-        statistics.put("enrollmentByType", getEnrollmentStatisticsByType());
-        statistics.put("averageEnrollmentByType", getAverageEnrollmentByType());
         statistics.put("facultyToStudentRatios", getFacultyToStudentRatios());
         statistics.put("programStatistics", getProgramOfferingStatistics());
         statistics.put("totalBudget", getTotalBudget());
@@ -635,8 +567,7 @@ public class DepartmentService implements Searchable<Department>, Reportable {
                     department.getDepartmentName(),
                     department.getDepartmentCode(),
                     department.getDepartmentId(),
-                    department.getCollege(),
-                    department.getType().toString()
+                    department.getLocation()
                 }))
                 .filter(Objects::nonNull)
                 .filter(field -> field.toLowerCase().contains(partialInput.toLowerCase()))
@@ -652,13 +583,13 @@ public class DepartmentService implements Searchable<Department>, Reportable {
     
     @Override
     public List<String> getSearchableFields() {
-        return Arrays.asList("departmentName", "departmentCode", "departmentId", "college", 
-                           "type", "totalEnrollment", "active");
+        return Arrays.asList("departmentName", "departmentCode", "departmentId", "location", 
+                           "totalEnrollment", "active");
     }
     
     @Override
     public List<String> getSortableFields() {
-        return Arrays.asList("departmentName", "departmentCode", "college", "type", 
+        return Arrays.asList("departmentName", "departmentCode", 
                            "totalEnrollment", "active");
     }
     
@@ -756,7 +687,10 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         if (department != null) {
             List<String> students = departmentStudents.get(departmentId);
             if (students != null) {
-                department.setTotalEnrollment(students.size());
+                students.forEach(studentId -> department.addStudent(studentId, null));
+                new ArrayList<>(department.getStudentIds()).stream()
+                        .filter(studentId -> !students.contains(studentId))
+                        .forEach(studentId -> department.removeStudent(studentId, null));
                 invalidateStatisticsCache();
             }
         }
@@ -820,17 +754,6 @@ public class DepartmentService implements Searchable<Department>, Reportable {
     }
     
     /**
-     * Get department count by type.
-     */
-    private Map<Department.DepartmentType, Long> getDepartmentCountByType() {
-        return departments.values().stream()
-                .collect(Collectors.groupingBy(
-                    Department::getType,
-                    Collectors.counting()
-                ));
-    }
-    
-    /**
      * Get total budget across all departments.
      */
     private double getTotalBudget() {
@@ -853,9 +776,7 @@ public class DepartmentService implements Searchable<Department>, Reportable {
     private boolean matchesKeyword(Department department, String keyword) {
         return department.getDepartmentName().toLowerCase().contains(keyword) ||
                department.getDepartmentCode().toLowerCase().contains(keyword) ||
-               department.getDepartmentId().toLowerCase().contains(keyword) ||
-               department.getCollege().toLowerCase().contains(keyword) ||
-               department.getType().toString().toLowerCase().contains(keyword);
+               department.getDepartmentId().toLowerCase().contains(keyword);
     }
     
     /**
@@ -898,8 +819,7 @@ public class DepartmentService implements Searchable<Department>, Reportable {
             case "departmentname": return department.getDepartmentName();
             case "departmentcode": return department.getDepartmentCode();
             case "departmentid": return department.getDepartmentId();
-            case "college": return department.getCollege();
-            case "type": return department.getType();
+            case "location": return department.getLocation();
             case "totalenrollment": return department.getTotalEnrollment();
             case "active": return department.isActive();
             default: return null;
@@ -923,10 +843,6 @@ public class DepartmentService implements Searchable<Department>, Reportable {
                 return Comparator.comparing(Department::getDepartmentName);
             case "departmentcode":
                 return Comparator.comparing(Department::getDepartmentCode);
-            case "college":
-                return Comparator.comparing(Department::getCollege);
-            case "type":
-                return Comparator.comparing(Department::getType);
             case "totalenrollment":
                 return Comparator.comparingInt(Department::getTotalEnrollment);
             case "active":
@@ -940,15 +856,14 @@ public class DepartmentService implements Searchable<Department>, Reportable {
      * Generate enrollment report.
      */
     private ReportData generateEnrollmentReport(String reportId, Map<String, Object> parameters) {
-        List<String> columns = Arrays.asList("Department", "Code", "College", "Type", "Enrollment", "Professors", "Courses", "Ratio");
+        List<String> columns = Arrays.asList("Department", "Code", "Location", "Enrollment", "Professors", "Courses", "Ratio");
         
         List<Map<String, Object>> rows = departments.values().stream()
                 .map(department -> {
                     Map<String, Object> row = new HashMap<>();
                     row.put("Department", department.getDepartmentName());
                     row.put("Code", department.getDepartmentCode());
-                    row.put("College", department.getCollege());
-                    row.put("Type", department.getType().toString());
+                    row.put("Location", department.getLocation());
                     row.put("Enrollment", department.getTotalEnrollment());
                     row.put("Professors", getDepartmentProfessors(department.getDepartmentId()).size());
                     row.put("Courses", getDepartmentCourses(department.getDepartmentId()).size());
@@ -965,28 +880,31 @@ public class DepartmentService implements Searchable<Department>, Reportable {
      * Generate demographic report.
      */
     private ReportData generateDemographicReport(String reportId, Map<String, Object> parameters) {
-        Map<String, Long> collegeStats = getDepartmentDistributionByCollege();
-        Map<Department.DepartmentType, Long> typeStats = getDepartmentCountByType();
+        Map<String, Long> locationStats = departments.values().stream()
+                .filter(department -> department.getLocation() != null)
+                .collect(Collectors.groupingBy(Department::getLocation, Collectors.counting()));
+        Map<Boolean, Long> activeStats = departments.values().stream()
+                .collect(Collectors.partitioningBy(Department::isActive, Collectors.counting()));
         
         List<String> columns = Arrays.asList("Category", "Value", "Count", "Percentage");
         List<Map<String, Object>> rows = new ArrayList<>();
         
-        // Add college statistics
+        // Add location statistics
         long totalDepartments = departments.size();
-        collegeStats.forEach((college, count) -> {
+        locationStats.forEach((location, count) -> {
             Map<String, Object> row = new HashMap<>();
-            row.put("Category", "College");
-            row.put("Value", college);
+            row.put("Category", "Location");
+            row.put("Value", location);
             row.put("Count", count);
             row.put("Percentage", String.format("%.1f%%", (count * 100.0) / totalDepartments));
             rows.add(row);
         });
         
-        // Add type statistics
-        typeStats.forEach((type, count) -> {
+        // Add active status statistics
+        activeStats.forEach((active, count) -> {
             Map<String, Object> row = new HashMap<>();
-            row.put("Category", "Department Type");
-            row.put("Value", type.toString());
+            row.put("Category", "Status");
+            row.put("Value", active ? "Active" : "Inactive");
             row.put("Count", count);
             row.put("Percentage", String.format("%.1f%%", (count * 100.0) / totalDepartments));
             rows.add(row);

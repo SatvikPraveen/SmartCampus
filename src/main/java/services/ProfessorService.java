@@ -480,7 +480,7 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
         return professors.values().stream()
                 .filter(professor -> professor.getAcademicRank() == AcademicRank.ASSOCIATE ||
                                    professor.getAcademicRank() == AcademicRank.FULL ||
-                                   professor.getAcademicRank() == AcademicRank.DISTINGUISHED)
+                                   professor.getAcademicRank() == AcademicRank.EMERITUS)
                 .collect(Collectors.toList());
     }
     
@@ -493,8 +493,8 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
         return professors.values().stream()
                 .filter(professor -> !professor.isTenured() &&
                                    professor.getYearsOfExperience() >= 6 &&
-                                   professor.getAcademicRank() != AcademicRank.INSTRUCTOR &&
-                                   professor.getAcademicRank() != AcademicRank.LECTURER)
+                                   professor.getAcademicRank() != AcademicRank.ADJUNCT &&
+                                   professor.getAcademicRank() != AcademicRank.EMERITUS)
                 .collect(Collectors.toList());
     }
     

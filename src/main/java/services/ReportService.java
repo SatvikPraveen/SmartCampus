@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.function.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
@@ -172,7 +173,7 @@ public class ReportService implements Reportable {
     private ReportData generateEnrollmentReport(String reportId, String title, Map<String, Object> parameters) {
         List<String> columns = List.of("Student ID", "Student Name", "Course", "Status", "Date", "Type");
         
-        List<Map<String, Object>> rows = enrollmentService.getAllStudentEnrollments()
+        List<Map<String, Object>> rows = enrollmentService.getAllEnrollments()
                 .stream()
                 .filter(Objects::nonNull)
                 .filter(this::isEnrollmentInDateRange)
@@ -228,7 +229,7 @@ public class ReportService implements Reportable {
         // Course performance using method references
         List<Map<String, Object>> courseRows = courseService.getAllCourses()
                 .stream()
-                .filter(course -> course.getStatus() == Course.CourseStatus.ACTIVE)
+                .filter(Course::isActive)
                 .map(this::calculateCoursePerformance)
                 .map(this::convertPerformanceToRow)
                 .collect(Collectors.toList());

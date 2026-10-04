@@ -500,7 +500,7 @@ public class AuthService implements Auditable {
         expiredTokens.forEach(activeSessions::remove);
         
         if (!expiredTokens.isEmpty()) {
-            logAuditEvent(AuditAction.SYSTEM, AuditLevel.INFO, null, "SYSTEM", 
+            logAuditEvent(AuditAction.OTHER, AuditLevel.INFO, null, "SYSTEM", 
                          "Cleaned up " + expiredTokens.size() + " expired sessions");
         }
         
@@ -614,7 +614,7 @@ public class AuthService implements Auditable {
         int attempts = loginAttempts.getOrDefault(username, 0);
         if (attempts >= MAX_LOGIN_ATTEMPTS) {
             accountLockouts.put(username, LocalDateTime.now());
-            logAuditEvent(AuditAction.SYSTEM, AuditLevel.SECURITY, username, "SYSTEM", 
+            logAuditEvent(AuditAction.OTHER, AuditLevel.SECURITY, username, "SYSTEM", 
                          "Account locked due to too many failed login attempts");
         }
     }
