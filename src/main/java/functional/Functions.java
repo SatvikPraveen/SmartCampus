@@ -3,6 +3,7 @@ package functional;
 
 import models.*;
 import enums.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -45,8 +46,8 @@ public final class Functions {
         return atIndex > 0 ? user.getEmail().substring(atIndex + 1) : "";
     };
     
-    public static final Function<User, UserRole> GET_USER_ROLE = user -> 
-        user == null ? null : user.getUserRole();
+    public static final Function<User, String> GET_USER_ROLE = user -> 
+        user == null ? null : user.getRole();
     
     public static final Function<User, String> GET_USER_TYPE = user -> {
         if (user instanceof Student) return "Student";
@@ -56,15 +57,12 @@ public final class Functions {
     };
     
     public static final Function<User, LocalDate> GET_CREATED_DATE = user -> 
-        user == null ? null : user.getCreatedDate();
+        user == null || user.getCreatedAt() == null ? null : user.getCreatedAt().toLocalDate();
     
     public static final Function<User, Long> GET_DAYS_SINCE_CREATION = user -> {
-        if (user == null || user.getCreatedDate() == null) return 0L;
-        return java.time.temporal.ChronoUnit.DAYS.between(user.getCreatedDate(), LocalDate.now());
+        if (user == null || user.getCreatedAt() == null) return 0L;
+        return java.time.temporal.ChronoUnit.DAYS.between(user.getCreatedAt().toLocalDate(), LocalDate.now());
     };
-    
-    public static final Function<User, Boolean> IS_EMAIL_VERIFIED = user -> 
-        user != null && user.isEmailVerified();
     
     public static final Function<User, String> GET_DISPLAY_NAME = user -> {
         if (user == null) return "Unknown User";
@@ -80,18 +78,15 @@ public final class Functions {
     public static final Function<Student, String> GET_MAJOR = student -> 
         student == null ? "" : student.getMajor();
     
-    public static final Function<Student, String> GET_MINOR = student -> 
-        student == null ? "" : student.getMinor();
-    
     public static final Function<Student, Integer> GET_ACADEMIC_YEAR = student -> 
-        student == null ? 0 : student.getAcademicYear();
+        student == null || student.getAcademicYear() == null ? 0 : student.getAcademicYear().getYear();
     
     public static final Function<Student, Integer> GET_COMPLETED_CREDITS = student -> 
-        student == null ? 0 : student.getCompletedCredits();
+        student == null ? 0 : student.getTotalCredits();
     
     public static final Function<Student, String> GET_CLASSIFICATION = student -> {
         if (student == null) return "Unknown";
-        int year = student.getAcademicYear();
+        int year = GET_ACADEMIC_YEAR.apply(student);
         if (year == 1) return "Freshman";
         if (year == 2) return "Sophomore";
         if (year == 3) return "Junior";
@@ -102,67 +97,42 @@ public final class Functions {
     
     public static final Function<Student, String> GET_ACADEMIC_STATUS = student -> {
         if (student == null) return "Unknown";
-        if (student.isGraduated()) return "Graduated";
-        if (student.isOnAcademicProbation()) return "Academic Probation";
+        if (student.isOnProbation()) return "Academic Probation";
         if (student.getGpa() >= 3.5) return "Good Standing";
         if (student.getGpa() >= 2.0) return "Satisfactory";
         return "Poor Standing";
     };
     
-    public static final Function<Student, String> GET_ENROLLMENT_STATUS = student -> {
-        if (student == null) return "Unknown";
-        if (student.isGraduated()) return "Graduated";
-        if (student.isFullTime()) return "Full-time";
-        return "Part-time";
-    };
-    
-    public static final Function<Student, Department> GET_DEPARTMENT = student -> 
-        student == null ? null : student.getDepartment();
-    
-    public static final Function<Student, String> GET_ADVISOR_ID = student -> 
-        student == null ? "" : student.getAdvisorId();
-    
-    public static final Function<Student, List<Enrollment>> GET_ENROLLMENTS = student -> 
-        student == null ? new ArrayList<>() : student.getEnrolledCourses();
+    public static final Function<Student, String> GET_DEPARTMENT_ID = student -> 
+        student == null ? "" : student.getDepartmentId();
     
     public static final Function<Student, List<String>> GET_COURSE_IDS = student -> {
-        if (student == null || student.getEnrolledCourses() == null) return new ArrayList<>();
-        return student.getEnrolledCourses().stream()
-            .map(Enrollment::getCourseId)
-            .collect(Collectors.toList());
-    };
-    
-    public static final Function<Student, Integer> GET_CURRENT_CREDIT_LOAD = student -> {
-        if (student == null || student.getEnrolledCourses() == null) return 0;
-        return student.getEnrolledCourses().stream()
-            .filter(enrollment -> enrollment.getStatus() == EnrollmentStatus.ENROLLED)
-            .mapToInt(enrollment -> enrollment.getCourse() != null ? enrollment.getCourse().getCredits() : 0)
-            .sum();
+        if (student == null || student.getEnrolledCourseIds() == null) return new ArrayList<>();
+        return new ArrayList<>(student.getEnrolledCourseIds());
     };
     
     // ==================== PROFESSOR FUNCTIONS ====================
     
     public static final Function<Professor, String> GET_RANK = professor -> 
-        professor == null ? "" : professor.getRank();
+        professor == null || professor.getAcademicRank() == null ? "" : professor.getAcademicRank().getTitle();
     
-    public static final Function<Professor, Department> GET_PROFESSOR_DEPARTMENT = professor -> 
-        professor == null ? null : professor.getDepartment();
+    public static final Function<Professor, String> GET_PROFESSOR_DEPARTMENT_ID = professor -> 
+        professor == null ? "" : professor.getDepartmentId();
     
     public static final Function<Professor, String> GET_OFFICE_LOCATION = professor -> 
         professor == null ? "" : professor.getOfficeLocation();
     
-    public static final Function<Professor, String> GET_OFFICE_HOURS = professor -> 
-        professor == null ? "" : professor.getOfficeHours();
+    public static final Function<Professor, String> GET_RESEARCH_AREA = professor -> 
+        professor == null ? "" : professor.getResearchArea();
     
-    public static final Function<Professor, List<String>> GET_RESEARCH_INTERESTS = professor -> 
-        professor == null ? new ArrayList<>() : professor.getResearchInterests();
-    
-    public static final Function<Professor, List<Course>> GET_TEACHING_COURSES = professor -> 
-        professor == null ? new ArrayList<>() : professor.getTeachingCourses();
+    public static final Function<Professor, List<String>> GET_TEACHING_COURSE_IDS = professor -> {
+        if (professor == null || professor.getTeachingCourseIds() == null) return new ArrayList<>();
+        return new ArrayList<>(professor.getTeachingCourseIds());
+    };
     
     public static final Function<Professor, Integer> GET_TEACHING_LOAD = professor -> {
-        if (professor == null || professor.getTeachingCourses() == null) return 0;
-        return professor.getTeachingCourses().size();
+        if (professor == null || professor.getTeachingCourseIds() == null) return 0;
+        return professor.getTeachingCourseIds().size();
     };
     
     public static final Function<Professor, LocalDate> GET_HIRE_DATE = professor -> 
@@ -173,20 +143,19 @@ public final class Functions {
         return java.time.temporal.ChronoUnit.YEARS.between(professor.getHireDate(), LocalDate.now());
     };
     
-    public static final Function<Professor, Integer> GET_PUBLICATIONS_COUNT = professor -> 
-        professor == null ? 0 : professor.getPublicationsCount();
-    
+    /**
+     * Tenure-track status is derived from rank: untenured assistant and
+     * associate professors are on the tenure track.
+     */
     public static final Function<Professor, String> GET_EMPLOYMENT_STATUS = professor -> {
         if (professor == null) return "Unknown";
         if (professor.isTenured()) return "Tenured";
-        if (professor.isTenureTrack()) return "Tenure Track";
-        if (professor.isAdjunct()) return "Adjunct";
-        if (professor.isEmeritus()) return "Emeritus";
+        Professor.AcademicRank rank = professor.getAcademicRank();
+        if (rank == Professor.AcademicRank.ASSISTANT || rank == Professor.AcademicRank.ASSOCIATE) return "Tenure Track";
+        if (rank == Professor.AcademicRank.ADJUNCT) return "Adjunct";
+        if (rank == Professor.AcademicRank.EMERITUS) return "Emeritus";
         return "Other";
     };
-    
-    public static final Function<Professor, Boolean> IS_DEPARTMENT_HEAD = professor -> 
-        professor != null && professor.isDepartmentHead();
     
     // ==================== COURSE FUNCTIONS ====================
     
@@ -194,7 +163,7 @@ public final class Functions {
         course == null ? "" : course.getCourseCode();
     
     public static final Function<Course, String> GET_COURSE_TITLE = course -> 
-        course == null ? "" : course.getTitle();
+        course == null ? "" : course.getCourseName();
     
     public static final Function<Course, String> GET_COURSE_DESCRIPTION = course -> 
         course == null ? "" : course.getDescription();
@@ -202,67 +171,69 @@ public final class Functions {
     public static final Function<Course, Integer> GET_CREDITS = course -> 
         course == null ? 0 : course.getCredits();
     
-    public static final Function<Course, String> GET_DEPARTMENT_CODE = course -> 
-        course == null ? "" : course.getDepartmentCode();
+    public static final Function<Course, String> GET_COURSE_DEPARTMENT_ID = course -> 
+        course == null ? "" : course.getDepartmentId();
     
-    public static final Function<Course, String> GET_COURSE_NUMBER = course -> 
-        course == null ? "" : course.getCourseNumber();
+    /**
+     * Numeric part of the course code (e.g. "101" for "CS101")
+     */
+    public static final Function<Course, String> GET_COURSE_NUMBER = course -> {
+        if (course == null || course.getCourseCode() == null) return "";
+        return course.getCourseCode().replaceFirst("^\\D+", "").trim();
+    };
     
     public static final Function<Course, Integer> GET_COURSE_LEVEL = course -> {
-        if (course == null || course.getCourseNumber() == null) return 0;
+        String courseNumber = GET_COURSE_NUMBER.apply(course);
         try {
-            return Integer.parseInt(course.getCourseNumber().substring(0, 1));
+            return Integer.parseInt(courseNumber.substring(0, 1));
         } catch (Exception e) {
             return 0;
         }
     };
     
     public static final Function<Course, String> GET_INSTRUCTOR_ID = course -> 
-        course == null ? "" : course.getInstructorId();
+        course == null ? "" : course.getProfessorId();
     
-    public static final Function<Course, Semester> GET_SEMESTER = course -> 
+    public static final Function<Course, String> GET_SEMESTER = course -> 
         course == null ? null : course.getSemester();
     
-    public static final Function<Course, CourseStatus> GET_STATUS = course -> 
+    public static final Function<Course, Course.CourseStatus> GET_STATUS = course -> 
         course == null ? null : course.getStatus();
     
     public static final Function<Course, Integer> GET_MAX_ENROLLMENT = course -> 
         course == null ? 0 : course.getMaxEnrollment();
     
     public static final Function<Course, Integer> GET_CURRENT_ENROLLMENT = course -> 
-        course == null ? 0 : course.getCurrentEnrollment();
+        course == null ? 0 : course.getEnrolledStudentIds().size();
     
-    public static final Function<Course, Integer> GET_AVAILABLE_SPOTS = course -> {
-        if (course == null) return 0;
-        return Math.max(0, course.getMaxEnrollment() - course.getCurrentEnrollment());
+    public static final Function<Course, Integer> GET_AVAILABLE_SPOTS = course -> 
+        course == null ? 0 : course.getAvailableSeats();
+    
+    public static final Function<Course, Double> GET_ENROLLMENT_PERCENTAGE = course -> 
+        course == null ? 0.0 : course.getEnrollmentPercentage();
+    
+    public static final Function<Course, String> GET_SCHEDULE = course -> {
+        if (course == null) return "";
+        StringBuilder schedule = new StringBuilder();
+        if (course.getMeetingDays() != null) {
+            schedule.append(String.join(", ", course.getMeetingDays()));
+        }
+        if (course.getStartTime() != null && course.getEndTime() != null) {
+            if (schedule.length() > 0) schedule.append(' ');
+            schedule.append(course.getStartTime()).append('-').append(course.getEndTime());
+        }
+        return schedule.toString();
     };
     
-    public static final Function<Course, Double> GET_ENROLLMENT_PERCENTAGE = course -> {
-        if (course == null || course.getMaxEnrollment() == 0) return 0.0;
-        return (double) course.getCurrentEnrollment() / course.getMaxEnrollment() * 100;
+    public static final Function<Course, String> GET_COURSE_LOCATION = course -> {
+        if (course == null) return "";
+        String building = course.getBuilding() != null ? course.getBuilding() : "";
+        String classroom = course.getClassroom() != null ? course.getClassroom() : "";
+        return (building + " " + classroom).trim();
     };
-    
-    public static final Function<Course, String> GET_SCHEDULE = course -> 
-        course == null ? "" : course.getSchedule();
-    
-    public static final Function<Course, String> GET_LOCATION = course -> 
-        course == null ? "" : course.getLocation();
     
     public static final Function<Course, List<String>> GET_PREREQUISITES = course -> 
-        course == null ? new ArrayList<>() : course.getPrerequisites();
-    
-    public static final Function<Course, Boolean> IS_ONLINE = course -> 
-        course != null && course.isOnline();
-    
-    public static final Function<Course, Boolean> IS_HYBRID = course -> 
-        course != null && course.isHybrid();
-    
-    public static final Function<Course, String> GET_DELIVERY_MODE = course -> {
-        if (course == null) return "Unknown";
-        if (course.isOnline()) return "Online";
-        if (course.isHybrid()) return "Hybrid";
-        return "In-Person";
-    };
+        course == null ? new ArrayList<>() : course.getPrerequisiteCourseIds();
     
     // ==================== ENROLLMENT FUNCTIONS ====================
     
@@ -272,54 +243,55 @@ public final class Functions {
     public static final Function<Enrollment, String> GET_ENROLLMENT_COURSE_ID = enrollment -> 
         enrollment == null ? "" : enrollment.getCourseId();
     
-    public static final Function<Enrollment, Semester> GET_ENROLLMENT_SEMESTER = enrollment -> 
+    public static final Function<Enrollment, String> GET_ENROLLMENT_SEMESTER = enrollment -> 
         enrollment == null ? null : enrollment.getSemester();
     
-    public static final Function<Enrollment, EnrollmentStatus> GET_ENROLLMENT_STATUS = enrollment -> 
+    public static final Function<Enrollment, Enrollment.EnrollmentStatus> GET_ENROLLMENT_STATUS = enrollment -> 
         enrollment == null ? null : enrollment.getStatus();
     
     public static final Function<Enrollment, LocalDate> GET_ENROLLMENT_DATE = enrollment -> 
-        enrollment == null ? null : enrollment.getEnrollmentDate();
+        enrollment == null || enrollment.getEnrollmentDate() == null ? null : enrollment.getEnrollmentDate().toLocalDate();
     
-    public static final Function<Enrollment, GradeLevel> GET_FINAL_GRADE = enrollment -> 
-        enrollment == null ? null : enrollment.getFinalGrade();
+    public static final Function<Enrollment, Enrollment.Grade> GET_FINAL_GRADE = enrollment -> 
+        enrollment == null ? null : enrollment.getGrade();
     
     public static final Function<Enrollment, Double> GET_GRADE_POINTS = enrollment -> {
-        if (enrollment == null || enrollment.getFinalGrade() == null) return 0.0;
-        Double points = enrollment.getFinalGrade().getGpaPoints();
-        return points != null ? points : 0.0;
+        if (enrollment == null || enrollment.getGrade() == null) return 0.0;
+        return enrollment.getGrade().getPoints();
     };
     
-    public static final Function<Enrollment, Course> GET_ENROLLMENT_COURSE = enrollment -> 
-        enrollment == null ? null : enrollment.getCourse();
-    
-    public static final Function<Enrollment, Student> GET_ENROLLMENT_STUDENT = enrollment -> 
-        enrollment == null ? null : enrollment.getStudent();
-    
+    /**
+     * Days since enrollment; for completed or dropped enrollments the
+     * last modification (status change) marks the end.
+     */
     public static final Function<Enrollment, Long> GET_ENROLLMENT_DURATION_DAYS = enrollment -> {
         if (enrollment == null || enrollment.getEnrollmentDate() == null) return 0L;
-        LocalDate endDate = enrollment.getStatus() == EnrollmentStatus.COMPLETED || 
-                          enrollment.getStatus() == EnrollmentStatus.DROPPED 
-                          ? enrollment.getDropDate() : LocalDate.now();
+        boolean ended = enrollment.getStatus() == Enrollment.EnrollmentStatus.COMPLETED || 
+                        enrollment.getStatus() == Enrollment.EnrollmentStatus.DROPPED;
+        LocalDateTime endDate = ended && enrollment.getLastModified() != null
+                          ? enrollment.getLastModified() : LocalDateTime.now();
         return java.time.temporal.ChronoUnit.DAYS.between(enrollment.getEnrollmentDate(), endDate);
     };
     
     // ==================== DEPARTMENT FUNCTIONS ====================
     
     public static final Function<Department, String> GET_DEPARTMENT_NAME = department -> 
-        department == null ? "" : department.getName();
+        department == null ? "" : department.getDepartmentName();
     
     public static final Function<Department, String> GET_DEPARTMENT_CODE = department -> 
-        department == null ? "" : department.getCode();
+        department == null ? "" : department.getDepartmentCode();
     
-    public static final Function<Department, Professor> GET_DEPARTMENT_HEAD = department -> 
-        department == null ? null : department.getDepartmentHead();
+    public static final Function<Department, String> GET_DEPARTMENT_HEAD_ID = department -> 
+        department == null ? null : department.getHeadOfDepartmentId();
     
-    public static final Function<Department, Double> GET_BUDGET = department -> 
-        department == null ? 0.0 : department.getBudget();
+    public static final Function<Department, Double> GET_BUDGET = department -> {
+        if (department == null) return 0.0;
+        BigDecimal budget = department.getAnnualBudget();
+        return budget != null ? budget.doubleValue() : 0.0;
+    };
     
     public static final Function<Department, Integer> GET_FACULTY_COUNT = department -> 
-        department == null ? 0 : department.getFacultyCount();
+        department == null ? 0 : department.getProfessorCount();
     
     public static final Function<Department, Integer> GET_STUDENT_COUNT = department -> 
         department == null ? 0 : department.getStudentCount();
@@ -332,27 +304,30 @@ public final class Functions {
     
     // ==================== GRADE FUNCTIONS ====================
     
-    public static final Function<Grade, GradeLevel> GET_GRADE_LEVEL = grade -> 
-        grade == null ? null : grade.getGradeLevel();
+    public static final Function<Grade, GradeLevel> GET_GRADE_LEVEL = grade -> {
+        if (grade == null) return null;
+        GradeLevel level = grade.getLetterGrade() != null ? GradeLevel.fromLetterGrade(grade.getLetterGrade()) : null;
+        return level != null ? level : GradeLevel.fromPercentage(grade.getPercentage());
+    };
     
     public static final Function<Grade, Double> GET_PERCENTAGE = grade -> 
         grade == null ? 0.0 : grade.getPercentage();
     
     public static final Function<Grade, String> GET_LETTER_GRADE = grade -> {
-        if (grade == null || grade.getGradeLevel() == null) return "";
-        return grade.getGradeLevel().getLetterGrade();
+        if (grade == null || grade.getLetterGrade() == null) return "";
+        return grade.getLetterGrade();
     };
     
     public static final Function<Grade, String> GET_GRADED_BY = grade -> 
         grade == null ? "" : grade.getGradedBy();
     
     public static final Function<Grade, LocalDateTime> GET_GRADED_DATE = grade -> 
-        grade == null ? null : grade.getGradedDate();
+        grade == null ? null : grade.getDateGraded();
     
     public static final Function<Grade, String> GET_COMMENTS = grade -> 
-        grade == null ? "" : grade.getComments();
+        grade == null ? "" : grade.getFeedback();
     
-    // ==================== STRING TRANSFORMATION FUNCTIONS ====================
+        // ==================== STRING TRANSFORMATION FUNCTIONS ====================
     
     public static final Function<String, String> TO_UPPER_CASE = str -> 
         str == null ? "" : str.toUpperCase();

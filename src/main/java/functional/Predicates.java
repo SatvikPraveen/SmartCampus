@@ -3,8 +3,10 @@ package functional;
 
 import models.*;
 import enums.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
@@ -41,18 +43,16 @@ public final class Predicates {
     public static final Predicate<User> HAS_PHONE = user -> 
         user != null && user.getPhoneNumber() != null && !user.getPhoneNumber().trim().isEmpty();
     
-    public static final Predicate<User> IS_VERIFIED = user -> 
-        user != null && user.isEmailVerified();
-    
-    public static Predicate<User> hasRole(UserRole role) {
-        return user -> user != null && user.getUserRole() == role;
+    public static Predicate<User> hasRole(String role) {
+        return user -> user != null && user.getRole() != null && role != null &&
+            user.getRole().equalsIgnoreCase(role.trim());
     }
     
     public static Predicate<User> nameContains(String searchTerm) {
         String search = searchTerm == null ? "" : searchTerm.toLowerCase().trim();
         return user -> user != null && 
-            (user.getFirstName().toLowerCase().contains(search) ||
-             user.getLastName().toLowerCase().contains(search));
+            ((user.getFirstName() != null && user.getFirstName().toLowerCase().contains(search)) ||
+             (user.getLastName() != null && user.getLastName().toLowerCase().contains(search)));
     }
     
     public static Predicate<User> emailDomain(String domain) {
@@ -61,41 +61,27 @@ public final class Predicates {
     }
     
     public static Predicate<User> createdAfter(LocalDate date) {
-        return user -> user != null && user.getCreatedDate() != null &&
-            user.getCreatedDate().isAfter(date);
+        return user -> user != null && user.getCreatedAt() != null &&
+            user.getCreatedAt().toLocalDate().isAfter(date);
     }
     
     public static Predicate<User> createdBefore(LocalDate date) {
-        return user -> user != null && user.getCreatedDate() != null &&
-            user.getCreatedDate().isBefore(date);
+        return user -> user != null && user.getCreatedAt() != null &&
+            user.getCreatedAt().toLocalDate().isBefore(date);
     }
     
     // ==================== STUDENT PREDICATES ====================
     
     public static final Predicate<Student> IS_UNDERGRADUATE = student -> 
-        student != null && student.isUndergraduate();
+        student != null && student.getAcademicYear() != null &&
+        student.getAcademicYear() != Student.AcademicYear.GRADUATE;
     
     public static final Predicate<Student> IS_GRADUATE = student -> 
-        student != null && student.isGraduate();
-    
-    public static final Predicate<Student> IS_FULL_TIME = student -> 
-        student != null && student.isFullTime();
-    
-    public static final Predicate<Student> IS_PART_TIME = IS_FULL_TIME.negate();
-    
-    public static final Predicate<Student> IS_HONORS = student -> 
-        student != null && student.isHonorsStudent();
-    
-    public static final Predicate<Student> IS_INTERNATIONAL = student -> 
-        student != null && student.isInternationalStudent();
-    
-    public static final Predicate<Student> IS_DOMESTIC = IS_INTERNATIONAL.negate();
-    
-    public static final Predicate<Student> IS_GRADUATED = student -> 
-        student != null && student.isGraduated();
+        student != null && student.getAcademicYear() == Student.AcademicYear.GRADUATE;
     
     public static final Predicate<Student> IS_ENROLLED = student -> 
-        student != null && !student.isGraduated() && student.isActive();
+        student != null && student.isActive() && 
+        student.getEnrolledCourseIds() != null && !student.getEnrolledCourseIds().isEmpty();
     
     public static Predicate<Student> hasGpaAbove(double minGpa) {
         return student -> student != null && student.getGpa() >= minGpa;
@@ -115,37 +101,27 @@ public final class Predicates {
             student.getMajor().equalsIgnoreCase(major.trim());
     }
     
-    public static Predicate<Student> hasMinor(String minor) {
-        return student -> student != null && student.getMinor() != null &&
-            student.getMinor().equalsIgnoreCase(minor.trim());
-    }
-    
     public static Predicate<Student> inYear(int academicYear) {
-        return student -> student != null && student.getAcademicYear() == academicYear;
+        return student -> student != null && student.getAcademicYear() != null &&
+            student.getAcademicYear().getYear() == academicYear;
     }
     
-    public static Predicate<Student> inDepartment(String department) {
-        return student -> student != null && student.getDepartment() != null &&
-            student.getDepartment().getName().equalsIgnoreCase(department.trim());
-    }
-    
-    public static Predicate<Student> hasAdvisor(String advisorId) {
-        return student -> student != null && student.getAdvisorId() != null &&
-            student.getAdvisorId().equals(advisorId);
+    public static Predicate<Student> inDepartment(String departmentId) {
+        return student -> student != null && student.getDepartmentId() != null &&
+            student.getDepartmentId().equalsIgnoreCase(departmentId.trim());
     }
     
     public static Predicate<Student> enrolledInCourse(String courseId) {
-        return student -> student != null && student.getEnrolledCourses() != null &&
-            student.getEnrolledCourses().stream()
-                .anyMatch(enrollment -> enrollment.getCourseId().equals(courseId));
+        return student -> student != null && student.getEnrolledCourseIds() != null &&
+            student.getEnrolledCourseIds().contains(courseId);
     }
     
     public static Predicate<Student> completedCreditsAbove(int minCredits) {
-        return student -> student != null && student.getCompletedCredits() >= minCredits;
+        return student -> student != null && student.getTotalCredits() >= minCredits;
     }
     
     public static Predicate<Student> onAcademicProbation() {
-        return student -> student != null && student.isOnAcademicProbation();
+        return student -> student != null && student.isOnProbation();
     }
     
     public static Predicate<Student> onDeansListEligible() {
@@ -155,53 +131,39 @@ public final class Predicates {
     // ==================== PROFESSOR PREDICATES ====================
     
     public static final Predicate<Professor> IS_TENURE_TRACK = professor -> 
-        professor != null && professor.isTenureTrack();
+        professor != null && (professor.getAcademicRank() == Professor.AcademicRank.ASSISTANT ||
+            professor.getAcademicRank() == Professor.AcademicRank.ASSOCIATE ||
+            professor.getAcademicRank() == Professor.AcademicRank.FULL);
     
     public static final Predicate<Professor> IS_TENURED = professor -> 
         professor != null && professor.isTenured();
     
     public static final Predicate<Professor> IS_ADJUNCT = professor -> 
-        professor != null && professor.isAdjunct();
+        professor != null && professor.getAcademicRank() == Professor.AcademicRank.ADJUNCT;
     
     public static final Predicate<Professor> IS_EMERITUS = professor -> 
-        professor != null && professor.isEmeritus();
-    
-    public static final Predicate<Professor> IS_DEPARTMENT_HEAD = professor -> 
-        professor != null && professor.isDepartmentHead();
+        professor != null && professor.getAcademicRank() == Professor.AcademicRank.EMERITUS;
     
     public static Predicate<Professor> hasRank(String rank) {
-        return professor -> professor != null && professor.getRank() != null &&
-            professor.getRank().equalsIgnoreCase(rank.trim());
+        return professor -> professor != null && professor.getAcademicRank() != null &&
+            (professor.getAcademicRank().name().equalsIgnoreCase(rank.trim()) ||
+             professor.getAcademicRank().getTitle().equalsIgnoreCase(rank.trim()));
     }
     
     public static Predicate<Professor> inDepartment(Department department) {
-        return professor -> professor != null && professor.getDepartment() != null &&
-            professor.getDepartment().equals(department);
+        return professor -> professor != null && department != null &&
+            professor.getDepartmentId() != null &&
+            professor.getDepartmentId().equals(department.getDepartmentId());
     }
     
     public static Predicate<Professor> teachingCourse(String courseId) {
-        return professor -> professor != null && professor.getTeachingCourses() != null &&
-            professor.getTeachingCourses().stream()
-                .anyMatch(course -> course.getCourseId().equals(courseId));
+        return professor -> professor != null && professor.getTeachingCourseIds() != null &&
+            professor.getTeachingCourseIds().contains(courseId);
     }
     
     public static Predicate<Professor> hasResearchInterest(String interest) {
-        return professor -> professor != null && professor.getResearchInterests() != null &&
-            professor.getResearchInterests().stream()
-                .anyMatch(research -> research.toLowerCase().contains(interest.toLowerCase()));
-    }
-    
-    public static Predicate<Professor> hasOfficeHours() {
-        return professor -> professor != null && professor.getOfficeHours() != null &&
-            !professor.getOfficeHours().isEmpty();
-    }
-    
-    public static Predicate<Professor> availableForAdvising() {
-        return professor -> professor != null && professor.isAvailableForAdvising();
-    }
-    
-    public static Predicate<Professor> hasPublications() {
-        return professor -> professor != null && professor.getPublicationsCount() > 0;
+        return professor -> professor != null && professor.getResearchArea() != null &&
+            professor.getResearchArea().toLowerCase().contains(interest.toLowerCase());
     }
     
     public static Predicate<Professor> hiredAfter(LocalDate date) {
@@ -211,34 +173,25 @@ public final class Predicates {
     
     // ==================== COURSE PREDICATES ====================
     
-    public static final Predicate<Course> IS_ACTIVE = course -> 
-        course != null && course.getStatus() == CourseStatus.ACTIVE;
+    public static final Predicate<Course> IS_ACTIVE_COURSE = course -> 
+        course != null && course.isActive();
     
     public static final Predicate<Course> IS_CANCELLED = course -> 
-        course != null && course.getStatus() == CourseStatus.CANCELLED;
+        course != null && course.getStatus() == Course.CourseStatus.CANCELLED;
     
     public static final Predicate<Course> IS_FULL = course -> 
-        course != null && course.isFull();
+        course != null && course.getAvailableSeats() == 0;
     
     public static final Predicate<Course> HAS_AVAILABILITY = IS_FULL.negate();
     
-    public static final Predicate<Course> IS_ONLINE = course -> 
-        course != null && course.isOnline();
-    
-    public static final Predicate<Course> IS_HYBRID = course -> 
-        course != null && course.isHybrid();
-    
-    public static final Predicate<Course> IS_IN_PERSON = course -> 
-        course != null && !course.isOnline() && !course.isHybrid();
-    
     public static final Predicate<Course> HAS_PREREQUISITES = course -> 
-        course != null && course.getPrerequisites() != null && !course.getPrerequisites().isEmpty();
+        course != null && course.hasPrerequisites();
     
     public static final Predicate<Course> NO_PREREQUISITES = HAS_PREREQUISITES.negate();
     
-    public static Predicate<Course> inDepartment(String departmentCode) {
-        return course -> course != null && course.getDepartmentCode() != null &&
-            course.getDepartmentCode().equalsIgnoreCase(departmentCode.trim());
+    public static Predicate<Course> courseInDepartment(String departmentId) {
+        return course -> course != null && course.getDepartmentId() != null &&
+            course.getDepartmentId().equalsIgnoreCase(departmentId.trim());
     }
     
     public static Predicate<Course> hasCredits(int credits) {
@@ -251,52 +204,54 @@ public final class Predicates {
     }
     
     public static Predicate<Course> taughtBy(String professorId) {
-        return course -> course != null && course.getInstructorId() != null &&
-            course.getInstructorId().equals(professorId);
+        return course -> course != null && course.getProfessorId() != null &&
+            course.getProfessorId().equals(professorId);
     }
     
-    public static Predicate<Course> scheduledFor(Semester semester) {
-        return course -> course != null && course.getSemester() == semester;
+    public static Predicate<Course> scheduledFor(String semester) {
+        return course -> course != null && course.getSemester() != null &&
+            course.getSemester().equalsIgnoreCase(semester.trim());
     }
     
-    public static Predicate<Course> meetsDuringTime(String timeSlot) {
-        return course -> course != null && course.getSchedule() != null &&
-            course.getSchedule().contains(timeSlot);
+    public static Predicate<Course> meetsDuringTime(LocalTime time) {
+        return course -> course != null && course.getStartTime() != null && 
+            course.getEndTime() != null &&
+            !time.isBefore(course.getStartTime()) && time.isBefore(course.getEndTime());
     }
     
     public static Predicate<Course> hasEnrollmentAbove(int minEnrollment) {
-        return course -> course != null && course.getCurrentEnrollment() >= minEnrollment;
+        return course -> course != null && course.getEnrolledStudentIds().size() >= minEnrollment;
     }
     
     public static Predicate<Course> hasEnrollmentBelow(int maxEnrollment) {
-        return course -> course != null && course.getCurrentEnrollment() <= maxEnrollment;
+        return course -> course != null && course.getEnrolledStudentIds().size() <= maxEnrollment;
     }
     
     public static Predicate<Course> enrollmentBetween(int minEnrollment, int maxEnrollment) {
         return course -> course != null && 
-            course.getCurrentEnrollment() >= minEnrollment && 
-            course.getCurrentEnrollment() <= maxEnrollment;
+            course.getEnrolledStudentIds().size() >= minEnrollment && 
+            course.getEnrolledStudentIds().size() <= maxEnrollment;
     }
     
     public static Predicate<Course> courseLevel(int level) {
-        return course -> course != null && course.getCourseNumber() != null &&
-            course.getCourseNumber().startsWith(String.valueOf(level));
+        return course -> course != null && courseNumber(course) != null &&
+            courseNumber(course).startsWith(String.valueOf(level));
     }
     
     public static Predicate<Course> isUndergraduate() {
-        return course -> course != null && course.getCourseNumber() != null &&
-            course.getCourseNumber().matches("^[1-4]\\d{2}.*");
+        return course -> course != null && courseNumber(course) != null &&
+            courseNumber(course).matches("^[1-4]\\d{2}.*");
     }
     
     public static Predicate<Course> isGraduate() {
-        return course -> course != null && course.getCourseNumber() != null &&
-            course.getCourseNumber().matches("^[5-9]\\d{2}.*");
+        return course -> course != null && courseNumber(course) != null &&
+            courseNumber(course).matches("^[5-9]\\d{2}.*");
     }
     
     public static Predicate<Course> titleContains(String searchTerm) {
         String search = searchTerm == null ? "" : searchTerm.toLowerCase().trim();
-        return course -> course != null && course.getTitle() != null &&
-            course.getTitle().toLowerCase().contains(search);
+        return course -> course != null && course.getCourseName() != null &&
+            course.getCourseName().toLowerCase().contains(search);
     }
     
     public static Predicate<Course> descriptionContains(String searchTerm) {
@@ -305,48 +260,66 @@ public final class Predicates {
             course.getDescription().toLowerCase().contains(search);
     }
     
+    /**
+     * Extracts the numeric part of a course code (e.g. "CS101" -> "101")
+     */
+    private static String courseNumber(Course course) {
+        String code = course.getCourseCode();
+        return code == null ? null : code.replaceFirst("^[A-Za-z\\s-]+", "");
+    }
+    
     // ==================== ENROLLMENT PREDICATES ====================
     
     public static final Predicate<Enrollment> IS_ACTIVE_ENROLLMENT = enrollment -> 
-        enrollment != null && enrollment.getStatus() == EnrollmentStatus.ENROLLED;
+        enrollment != null && enrollment.getStatus() == Enrollment.EnrollmentStatus.ENROLLED;
     
     public static final Predicate<Enrollment> IS_DROPPED = enrollment -> 
-        enrollment != null && enrollment.getStatus() == EnrollmentStatus.DROPPED;
+        enrollment != null && enrollment.getStatus() == Enrollment.EnrollmentStatus.DROPPED;
     
     public static final Predicate<Enrollment> IS_COMPLETED = enrollment -> 
-        enrollment != null && enrollment.getStatus() == EnrollmentStatus.COMPLETED;
+        enrollment != null && enrollment.getStatus() == Enrollment.EnrollmentStatus.COMPLETED;
     
     public static final Predicate<Enrollment> IS_WITHDRAWN = enrollment -> 
-        enrollment != null && enrollment.getStatus() == EnrollmentStatus.WITHDRAWN;
+        enrollment != null && enrollment.getStatus() == Enrollment.EnrollmentStatus.WITHDRAWN;
     
     public static final Predicate<Enrollment> HAS_GRADE = enrollment -> 
-        enrollment != null && enrollment.getFinalGrade() != null;
+        enrollment != null && enrollment.getGrade() != null;
     
-    public static final Predicate<Enrollment> IS_PASSING = enrollment -> 
-        enrollment != null && enrollment.getFinalGrade() != null &&
-        enrollment.getFinalGrade().isPassingGrade();
+    public static final Predicate<Enrollment> IS_PASSING = enrollment -> {
+        GradeLevel level = gradeLevelOf(enrollment);
+        return level != null && level.isPassingGrade();
+    };
     
-    public static final Predicate<Enrollment> IS_FAILING = enrollment -> 
-        enrollment != null && enrollment.getFinalGrade() != null &&
-        enrollment.getFinalGrade().isFailingGrade();
+    public static final Predicate<Enrollment> IS_FAILING = enrollment -> {
+        GradeLevel level = gradeLevelOf(enrollment);
+        return level != null && level.isFailingGrade();
+    };
     
-    public static Predicate<Enrollment> enrolledInSemester(Semester semester) {
-        return enrollment -> enrollment != null && enrollment.getSemester() == semester;
+    public static Predicate<Enrollment> enrolledInSemester(String semester) {
+        return enrollment -> enrollment != null && enrollment.getSemester() != null &&
+            enrollment.getSemester().equalsIgnoreCase(semester.trim());
     }
     
     public static Predicate<Enrollment> enrolledAfter(LocalDate date) {
         return enrollment -> enrollment != null && enrollment.getEnrollmentDate() != null &&
-            enrollment.getEnrollmentDate().isAfter(date);
+            enrollment.getEnrollmentDate().toLocalDate().isAfter(date);
     }
     
     public static Predicate<Enrollment> hasGradeLevel(GradeLevel gradeLevel) {
-        return enrollment -> enrollment != null && enrollment.getFinalGrade() == gradeLevel;
+        return enrollment -> gradeLevel != null && gradeLevelOf(enrollment) == gradeLevel;
     }
     
-    public static Predicate<Enrollment> hasGpaAbove(double minGpa) {
-        return enrollment -> enrollment != null && enrollment.getFinalGrade() != null &&
-            enrollment.getFinalGrade().getGpaPoints() != null &&
-            enrollment.getFinalGrade().getGpaPoints() >= minGpa;
+    public static Predicate<Enrollment> hasGradePointsAbove(double minGpa) {
+        return enrollment -> enrollment != null && enrollment.getGrade() != null &&
+            enrollment.getGrade().getPoints() >= minGpa;
+    }
+    
+    /**
+     * Maps an enrollment's letter grade to the corresponding {@link GradeLevel}, or null
+     */
+    private static GradeLevel gradeLevelOf(Enrollment enrollment) {
+        if (enrollment == null || enrollment.getGrade() == null) return null;
+        return GradeLevel.fromLetterGrade(enrollment.getGrade().getLetter());
     }
     
     // ==================== DEPARTMENT PREDICATES ====================
@@ -355,28 +328,30 @@ public final class Predicates {
         department != null && department.isActive();
     
     public static final Predicate<Department> HAS_HEAD = department -> 
-        department != null && department.getDepartmentHead() != null;
+        department != null && department.getHeadOfDepartmentId() != null;
     
     public static final Predicate<Department> HAS_BUDGET = department -> 
-        department != null && department.getBudget() > 0;
+        department != null && department.getAnnualBudget() != null &&
+        department.getAnnualBudget().signum() > 0;
     
-    public static Predicate<Department> nameContains(String searchTerm) {
+    public static Predicate<Department> departmentNameContains(String searchTerm) {
         String search = searchTerm == null ? "" : searchTerm.toLowerCase().trim();
-        return department -> department != null && department.getName() != null &&
-            department.getName().toLowerCase().contains(search);
+        return department -> department != null && department.getDepartmentName() != null &&
+            department.getDepartmentName().toLowerCase().contains(search);
     }
     
     public static Predicate<Department> codeEquals(String code) {
-        return department -> department != null && department.getCode() != null &&
-            department.getCode().equalsIgnoreCase(code.trim());
+        return department -> department != null && department.getDepartmentCode() != null &&
+            department.getDepartmentCode().equalsIgnoreCase(code.trim());
     }
     
     public static Predicate<Department> budgetAbove(double minBudget) {
-        return department -> department != null && department.getBudget() >= minBudget;
+        return department -> department != null && department.getAnnualBudget() != null &&
+            department.getAnnualBudget().compareTo(BigDecimal.valueOf(minBudget)) >= 0;
     }
     
     public static Predicate<Department> facultyCountAbove(int minCount) {
-        return department -> department != null && department.getFacultyCount() >= minCount;
+        return department -> department != null && department.getProfessorCount() >= minCount;
     }
     
     public static Predicate<Department> studentCountAbove(int minCount) {
@@ -385,21 +360,29 @@ public final class Predicates {
     
     // ==================== GRADE PREDICATES ====================
     
-    public static final Predicate<Grade> IS_PASSING_GRADE = grade -> 
-        grade != null && grade.getGradeLevel() != null && grade.getGradeLevel().isPassingGrade();
+    public static final Predicate<Grade> IS_PASSING_GRADE = grade -> {
+        GradeLevel level = gradeLevelOf(grade);
+        return level != null && level.isPassingGrade();
+    };
     
-    public static final Predicate<Grade> IS_FAILING_GRADE = grade -> 
-        grade != null && grade.getGradeLevel() != null && grade.getGradeLevel().isFailingGrade();
+    public static final Predicate<Grade> IS_FAILING_GRADE = grade -> {
+        GradeLevel level = gradeLevelOf(grade);
+        return level != null && level.isFailingGrade();
+    };
     
-    public static final Predicate<Grade> IS_HONORS_GRADE = grade -> 
-        grade != null && grade.getGradeLevel() != null && grade.getGradeLevel().isHonorsGrade();
+    public static final Predicate<Grade> IS_HONORS_GRADE = grade -> {
+        GradeLevel level = gradeLevelOf(grade);
+        return level != null && level.isHonorsGrade();
+    };
     
-    public static final Predicate<Grade> AFFECTS_GPA = grade -> 
-        grade != null && grade.getGradeLevel() != null && grade.getGradeLevel().affectsGpa();
+    public static final Predicate<Grade> AFFECTS_GPA = grade -> {
+        GradeLevel level = gradeLevelOf(grade);
+        return level != null && level.affectsGpa();
+    };
     
     public static Predicate<Grade> gradedAfter(LocalDateTime date) {
-        return grade -> grade != null && grade.getGradedDate() != null &&
-            grade.getGradedDate().isAfter(date);
+        return grade -> grade != null && grade.getDateGraded() != null &&
+            grade.getDateGraded().isAfter(date);
     }
     
     public static Predicate<Grade> gradedBy(String professorId) {
@@ -409,6 +392,14 @@ public final class Predicates {
     
     public static Predicate<Grade> hasPercentageAbove(double minPercentage) {
         return grade -> grade != null && grade.getPercentage() >= minPercentage;
+    }
+    
+    /**
+     * Maps a grade's letter grade to the corresponding {@link GradeLevel}, or null
+     */
+    private static GradeLevel gradeLevelOf(Grade grade) {
+        if (grade == null || grade.getLetterGrade() == null) return null;
+        return GradeLevel.fromLetterGrade(grade.getLetterGrade());
     }
     
     // ==================== VALIDATION PREDICATES ====================
@@ -513,7 +504,7 @@ public final class Predicates {
     }
     
     public static <T> Predicate<Collection<T>> isNotEmpty() {
-        return isEmpty().negate();
+        return Predicates.<T>isEmpty().negate();
     }
     
     public static <T> Predicate<Collection<T>> contains(T element) {

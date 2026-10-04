@@ -156,6 +156,20 @@ public final class ValidationUtil {
     
     // String validation methods
     /**
+     * Returns true when the string is null or has zero length (whitespace counts as content).
+     */
+    public static boolean isEmpty(String str) {
+        return str == null || str.isEmpty();
+    }
+
+    /**
+     * Returns true when the string is non-null and contains at least one non-whitespace character.
+     */
+    public static boolean isValidString(String str) {
+        return !isNullOrBlank(str);
+    }
+
+    /**
      * Checks if a string is null, empty, or contains only whitespace.
      * @param str The string to check
      * @return true if string is null or blank, false otherwise

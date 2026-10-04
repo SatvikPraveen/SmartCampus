@@ -217,7 +217,7 @@ public final class StreamUtils {
                 }
                 lists.get(lists.size() - 1).add(item);
             },
-            (list1, list2) -> { list1.addAll(list2); return list1; }
+            (list1, list2) -> list1.addAll(list2)
         ).stream();
     }
     
@@ -260,7 +260,7 @@ public final class StreamUtils {
                     lists.get(lists.size() - 1).add(item);
                 }
             },
-            (list1, list2) -> { list1.addAll(list2); return list1; }
+            (list1, list2) -> list1.addAll(list2)
         ).stream().filter(list -> !list.isEmpty());
     }
     
@@ -286,15 +286,19 @@ public final class StreamUtils {
                 }
             },
             (list1, list2) -> {
-                if (list1.isEmpty()) return list2;
-                if (list2.isEmpty()) return list1;
+                if (list2.isEmpty()) return;
+                if (list1.isEmpty()) {
+                    list1.addAll(list2);
+                    return;
+                }
                 
                 int comparison = comparator.compare(list1.get(0), list2.get(0));
-                if (comparison < 0) return list1;
-                if (comparison > 0) return list2;
-                
-                list1.addAll(list2);
-                return list1;
+                if (comparison > 0) {
+                    list1.clear();
+                    list1.addAll(list2);
+                } else if (comparison == 0) {
+                    list1.addAll(list2);
+                }
             }
         ).stream();
     }
@@ -363,7 +367,7 @@ public final class StreamUtils {
      */
     public static Map<Integer, Long> studentCountByYear(Stream<Student> students) {
         return students.collect(java.util.stream.Collectors.groupingBy(
-            Student::getAcademicYear,
+            s -> s.getAcademicYear().getYear(),
             java.util.stream.Collectors.counting()
         ));
     }
@@ -372,14 +376,14 @@ public final class StreamUtils {
      * Filters available courses
      */
     public static Stream<Course> availableCourses(Stream<Course> courses) {
-        return courses.filter(c -> c.getCurrentEnrollment() < c.getMaxEnrollment());
+        return courses.filter(c -> c.getEnrolledStudentIds().size() < c.getMaxEnrollment());
     }
     
     /**
-     * Gets courses by department code
+     * Gets courses by department ID
      */
-    public static Stream<Course> coursesByDepartment(Stream<Course> courses, String departmentCode) {
-        return courses.filter(c -> departmentCode.equals(c.getDepartmentCode()));
+    public static Stream<Course> coursesByDepartment(Stream<Course> courses, String departmentId) {
+        return courses.filter(c -> departmentId.equals(c.getDepartmentId()));
     }
     
     /**
@@ -392,15 +396,19 @@ public final class StreamUtils {
     /**
      * Gets enrollments for a specific semester
      */
-    public static Stream<Enrollment> enrollmentsForSemester(Stream<Enrollment> enrollments, Semester semester) {
-        return enrollments.filter(e -> semester.equals(e.getSemester()));
+    public static Stream<Enrollment> enrollmentsForSemester(Stream<Enrollment> enrollments, String semester) {
+        return enrollments.filter(e -> semester.equalsIgnoreCase(e.getSemester()));
     }
     
     /**
      * Filters passing enrollments
      */
     public static Stream<Enrollment> passingEnrollments(Stream<Enrollment> enrollments) {
-        return enrollments.filter(e -> e.getFinalGrade() != null && e.getFinalGrade().isPassingGrade());
+        return enrollments.filter(e -> {
+            if (e.getGrade() == null) return false;
+            GradeLevel level = GradeLevel.fromLetterGrade(e.getGrade().getLetter());
+            return level != null && level.isPassingGrade();
+        });
     }
     
     /**
@@ -413,15 +421,9 @@ public final class StreamUtils {
         int totalCredits = 0;
         
         for (Enrollment enrollment : enrollmentList) {
-            if (enrollment.getFinalGrade() != null && enrollment.getFinalGrade().affectsGpa()) {
-                Course course = enrollment.getCourse();
-                if (course != null) {
-                    Double points = enrollment.getFinalGrade().getGpaPoints();
-                    if (points != null) {
-                        totalPoints += points * course.getCredits();
-                        totalCredits += course.getCredits();
-                    }
-                }
+            if (enrollment.countsTowardGpa()) {
+                totalPoints += enrollment.getGrade().getPoints() * enrollment.getCreditHours();
+                totalCredits += enrollment.getCreditHours();
             }
         }
         

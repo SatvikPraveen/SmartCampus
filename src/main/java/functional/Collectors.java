@@ -6,7 +6,6 @@ import enums.*;
 import java.util.*;
 import java.util.function.*;
 import java.util.stream.Collector;
-import java.util.stream.Collectors;
 
 /**
  * Custom collectors for campus entities and common operations
@@ -25,7 +24,7 @@ public final class Collectors {
      */
     public static Collector<Student, ?, Map<String, List<Student>>> byClassification() {
         return java.util.stream.Collectors.groupingBy(student -> {
-            int year = student.getAcademicYear();
+            int year = Functions.GET_ACADEMIC_YEAR.apply(student);
             if (year == 1) return "Freshman";
             if (year == 2) return "Sophomore"; 
             if (year == 3) return "Junior";
@@ -74,7 +73,7 @@ public final class Collectors {
             (stats, student) -> {
                 stats.addStudent(student);
                 stats.addGpa(student.getGpa());
-                stats.addCredits(student.getCompletedCredits());
+                stats.addCredits(student.getTotalCredits());
             },
             (stats1, stats2) -> {
                 stats1.merge(stats2);
@@ -96,8 +95,8 @@ public final class Collectors {
     /**
      * Groups students by department
      */
-    public static Collector<Student, ?, Map<Department, List<Student>>> byDepartment() {
-        return java.util.stream.Collectors.groupingBy(Student::getDepartment);
+    public static Collector<Student, ?, Map<String, List<Student>>> byDepartment() {
+        return java.util.stream.Collectors.groupingBy(Student::getDepartmentId);
     }
     
     // ==================== COURSE COLLECTORS ====================
@@ -106,13 +105,13 @@ public final class Collectors {
      * Groups courses by department
      */
     public static Collector<Course, ?, Map<String, List<Course>>> coursesByDepartment() {
-        return java.util.stream.Collectors.groupingBy(Course::getDepartmentCode);
+        return java.util.stream.Collectors.groupingBy(Course::getDepartmentId);
     }
     
     /**
      * Groups courses by semester
      */
-    public static Collector<Course, ?, Map<Semester, List<Course>>> coursesBySemester() {
+    public static Collector<Course, ?, Map<String, List<Course>>> coursesBySemester() {
         return java.util.stream.Collectors.groupingBy(Course::getSemester);
     }
     
@@ -121,8 +120,8 @@ public final class Collectors {
      */
     public static Collector<Course, ?, Map<String, List<Course>>> coursesByLevel() {
         return java.util.stream.Collectors.groupingBy(course -> {
-            String courseNumber = course.getCourseNumber();
-            if (courseNumber != null && !courseNumber.isEmpty()) {
+            String courseNumber = Functions.GET_COURSE_NUMBER.apply(course);
+            if (!courseNumber.isEmpty()) {
                 char firstDigit = courseNumber.charAt(0);
                 return (firstDigit >= '5' && firstDigit <= '9') ? "Graduate" : "Undergraduate";
             }
@@ -135,7 +134,7 @@ public final class Collectors {
      */
     public static Collector<Course, ?, Map<String, List<Course>>> coursesByEnrollmentStatus() {
         return java.util.stream.Collectors.groupingBy(course -> {
-            double enrollmentPercentage = (double) course.getCurrentEnrollment() / course.getMaxEnrollment();
+            double enrollmentPercentage = (double) course.getEnrolledStudentIds().size() / course.getMaxEnrollment();
             if (enrollmentPercentage >= 1.0) return "Full";
             if (enrollmentPercentage >= 0.8) return "Nearly Full";
             if (enrollmentPercentage >= 0.5) return "Moderate";
@@ -152,7 +151,7 @@ public final class Collectors {
             CourseStatistics::new,
             (stats, course) -> {
                 stats.addCourse(course);
-                stats.addEnrollment(course.getCurrentEnrollment());
+                stats.addEnrollment(course.getEnrolledStudentIds().size());
                 stats.addCredits(course.getCredits());
             },
             (stats1, stats2) -> {
@@ -167,7 +166,7 @@ public final class Collectors {
      */
     public static Collector<Course, ?, List<Course>> availableCourses() {
         return java.util.stream.Collectors.filtering(
-            course -> course.getCurrentEnrollment() < course.getMaxEnrollment(),
+            course -> course.getEnrolledStudentIds().size() < course.getMaxEnrollment(),
             java.util.stream.Collectors.toList()
         );
     }
@@ -184,14 +183,14 @@ public final class Collectors {
     /**
      * Groups enrollments by semester
      */
-    public static Collector<Enrollment, ?, Map<Semester, List<Enrollment>>> enrollmentsBySemester() {
+    public static Collector<Enrollment, ?, Map<String, List<Enrollment>>> enrollmentsBySemester() {
         return java.util.stream.Collectors.groupingBy(Enrollment::getSemester);
     }
     
     /**
      * Groups enrollments by status
      */
-    public static Collector<Enrollment, ?, Map<EnrollmentStatus, List<Enrollment>>> enrollmentsByStatus() {
+    public static Collector<Enrollment, ?, Map<Enrollment.EnrollmentStatus, List<Enrollment>>> enrollmentsByStatus() {
         return java.util.stream.Collectors.groupingBy(Enrollment::getStatus);
     }
     
@@ -200,8 +199,8 @@ public final class Collectors {
      */
     public static Collector<Enrollment, ?, Map<GradeLevel, List<Enrollment>>> enrollmentsByGrade() {
         return java.util.stream.Collectors.groupingBy(
-            enrollment -> enrollment.getFinalGrade() != null ? 
-                enrollment.getFinalGrade() : GradeLevel.INCOMPLETE
+            enrollment -> toGradeLevel(enrollment.getGrade()) != null ? 
+                toGradeLevel(enrollment.getGrade()) : GradeLevel.INCOMPLETE
         );
     }
     
@@ -212,10 +211,9 @@ public final class Collectors {
         return Collector.of(
             GpaCalculator::new,
             (calc, enrollment) -> {
-                if (enrollment.getFinalGrade() != null && enrollment.getFinalGrade().affectsGpa()) {
-                    Course course = enrollment.getCourse();
-                    int credits = course != null ? course.getCredits() : 0;
-                    calc.addGrade(enrollment.getFinalGrade(), credits);
+                GradeLevel grade = toGradeLevel(enrollment.getGrade());
+                if (grade != null && grade.affectsGpa()) {
+                    calc.addGrade(grade, enrollment.getCreditHours());
                 }
             },
             GpaCalculator::merge,
@@ -228,8 +226,8 @@ public final class Collectors {
      */
     public static Collector<Enrollment, ?, List<Enrollment>> passingEnrollments() {
         return java.util.stream.Collectors.filtering(
-            enrollment -> enrollment.getFinalGrade() != null && 
-                         enrollment.getFinalGrade().isPassingGrade(),
+            enrollment -> toGradeLevel(enrollment.getGrade()) != null && 
+                         toGradeLevel(enrollment.getGrade()).isPassingGrade(),
             java.util.stream.Collectors.toList()
         );
     }
@@ -239,8 +237,8 @@ public final class Collectors {
      */
     public static Collector<Enrollment, ?, List<Enrollment>> failingEnrollments() {
         return java.util.stream.Collectors.filtering(
-            enrollment -> enrollment.getFinalGrade() != null && 
-                         enrollment.getFinalGrade().isFailingGrade(),
+            enrollment -> toGradeLevel(enrollment.getGrade()) != null && 
+                         toGradeLevel(enrollment.getGrade()).isFailingGrade(),
             java.util.stream.Collectors.toList()
         );
     }
@@ -249,10 +247,7 @@ public final class Collectors {
      * Calculates total credits from enrollments
      */
     public static Collector<Enrollment, ?, Integer> totalCredits() {
-        return java.util.stream.Collectors.summingInt(enrollment -> {
-            Course course = enrollment.getCourse();
-            return course != null ? course.getCredits() : 0;
-        });
+        return java.util.stream.Collectors.summingInt(Enrollment::getCreditHours);
     }
     
     // ==================== PROFESSOR COLLECTORS ====================
@@ -262,28 +257,22 @@ public final class Collectors {
      */
     public static Collector<Professor, ?, Map<String, List<Professor>>> professorsByRank() {
         return java.util.stream.Collectors.groupingBy(
-            professor -> professor.getRank() != null ? professor.getRank() : "Unknown"
+            professor -> professor.getAcademicRank() != null ? professor.getAcademicRank().getTitle() : "Unknown"
         );
     }
     
     /**
      * Groups professors by department
      */
-    public static Collector<Professor, ?, Map<Department, List<Professor>>> professorsByDepartment() {
-        return java.util.stream.Collectors.groupingBy(Professor::getDepartment);
+    public static Collector<Professor, ?, Map<String, List<Professor>>> professorsByDepartment() {
+        return java.util.stream.Collectors.groupingBy(Professor::getDepartmentId);
     }
     
     /**
      * Groups professors by employment status
      */
     public static Collector<Professor, ?, Map<String, List<Professor>>> professorsByEmploymentStatus() {
-        return java.util.stream.Collectors.groupingBy(professor -> {
-            if (professor.isTenured()) return "Tenured";
-            if (professor.isTenureTrack()) return "Tenure Track";
-            if (professor.isAdjunct()) return "Adjunct";
-            if (professor.isEmeritus()) return "Emeritus";
-            return "Other";
-        });
+        return java.util.stream.Collectors.groupingBy(Functions.GET_EMPLOYMENT_STATUS);
     }
     
     /**
@@ -317,7 +306,7 @@ public final class Collectors {
      * Groups grades by level
      */
     public static Collector<Grade, ?, Map<GradeLevel, List<Grade>>> gradesByLevel() {
-        return java.util.stream.Collectors.groupingBy(Grade::getGradeLevel);
+        return java.util.stream.Collectors.groupingBy(Functions.GET_GRADE_LEVEL);
     }
     
     /**
@@ -325,7 +314,7 @@ public final class Collectors {
      */
     public static Collector<Grade, ?, Map<GradeLevel.GradeCategory, List<Grade>>> gradesByCategory() {
         return java.util.stream.Collectors.groupingBy(
-            grade -> grade.getGradeLevel().getCategory()
+            grade -> Functions.GET_GRADE_LEVEL.apply(grade).getCategory()
         );
     }
     
@@ -334,7 +323,7 @@ public final class Collectors {
      */
     public static Collector<Grade, ?, Map<GradeLevel, Long>> gradeDistribution() {
         return java.util.stream.Collectors.groupingBy(
-            Grade::getGradeLevel,
+            Functions.GET_GRADE_LEVEL,
             java.util.stream.Collectors.counting()
         );
     }
@@ -353,7 +342,7 @@ public final class Collectors {
      */
     public static Collector<Department, ?, Map<String, List<Department>>> departmentsByBudgetRange() {
         return java.util.stream.Collectors.groupingBy(department -> {
-            double budget = department.getBudget();
+            double budget = Functions.GET_BUDGET.apply(department);
             if (budget >= 10000000) return "Very High (>$10M)";
             if (budget >= 5000000) return "High ($5M-$10M)";
             if (budget >= 1000000) return "Medium ($1M-$5M)";
@@ -366,14 +355,14 @@ public final class Collectors {
      * Calculates total budget
      */
     public static Collector<Department, ?, Double> totalBudget() {
-        return java.util.stream.Collectors.summingDouble(Department::getBudget);
+        return java.util.stream.Collectors.summingDouble(Functions.GET_BUDGET::apply);
     }
     
     /**
      * Calculates total faculty count
      */
     public static Collector<Department, ?, Integer> totalFacultyCount() {
-        return java.util.stream.Collectors.summingInt(Department::getFacultyCount);
+        return java.util.stream.Collectors.summingInt(Department::getProfessorCount);
     }
     
     /**
@@ -390,7 +379,7 @@ public final class Collectors {
      */
     public static <T> Collector<T, ?, List<T>> toSortedList(Comparator<T> comparator) {
         return Collector.of(
-            ArrayList::new,
+            ArrayList<T>::new,
             List::add,
             (list1, list2) -> { list1.addAll(list2); return list1; },
             list -> { list.sort(comparator); return list; }
@@ -439,7 +428,7 @@ public final class Collectors {
      */
     public static <T> Collector<T, ?, Map<T, Double>> toPercentageMap() {
         return Collector.of(
-            HashMap::new,
+            HashMap<T, Double>::new,
             (map, item) -> map.merge(item, 1.0, Double::sum),
             (map1, map2) -> {
                 map2.forEach((key, value) -> map1.merge(key, value, Double::sum));
@@ -459,10 +448,10 @@ public final class Collectors {
      */
     public static <T> Collector<T, ?, List<T>> toUniqueList() {
         return Collector.of(
-            LinkedHashSet::new,
+            LinkedHashSet<T>::new,
             Set::add,
             (set1, set2) -> { set1.addAll(set2); return set1; },
-            ArrayList::new
+            ArrayList<T>::new
         );
     }
     
@@ -471,6 +460,13 @@ public final class Collectors {
      */
     public static <T> Collector<T, ?, Map<Boolean, List<T>>> partitioningBy(Predicate<T> predicate) {
         return java.util.stream.Collectors.partitioningBy(predicate);
+    }
+    
+    /**
+     * Maps an enrollment grade onto the institutional grade scale
+     */
+    private static GradeLevel toGradeLevel(Enrollment.Grade grade) {
+        return grade != null ? GradeLevel.fromLetterGrade(grade.getLetter()) : null;
     }
     
     // ==================== HELPER CLASSES ====================
