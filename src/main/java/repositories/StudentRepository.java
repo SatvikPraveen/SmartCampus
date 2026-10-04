@@ -160,14 +160,15 @@ public class StudentRepository extends BaseRepository<Student, String> {
      * Find students enrolled in current academic year
      */
     public List<Student> findCurrentYearStudents() {
-        int currentYear = LocalDate.now().getYear();
+        LocalDate today = LocalDate.now();
         
-        // Academic year typically starts in August/September
-        LocalDate academicYearStart = LocalDate.of(currentYear, 8, 1);
+        // Academic year starts on 1 August; before August we are still in the year that began last August
+        int startYear = today.getMonthValue() >= 8 ? today.getYear() : today.getYear() - 1;
+        LocalDate academicYearStart = LocalDate.of(startYear, 8, 1);
         
         return findByPredicate(student -> 
             student.getEnrollmentDate() != null &&
-            student.getEnrollmentDate().isAfter(academicYearStart)
+            !student.getEnrollmentDate().isBefore(academicYearStart)
         );
     }
     

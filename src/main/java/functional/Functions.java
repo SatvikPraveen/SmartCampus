@@ -340,7 +340,8 @@ public final class Functions {
     
     public static final Function<String, String> TO_TITLE_CASE = str -> {
         if (str == null || str.isEmpty()) return "";
-        return Arrays.stream(str.split("\\s+"))
+        return Arrays.stream(str.trim().split("\\s+"))
+            .filter(word -> !word.isEmpty())
             .map(word -> word.substring(0, 1).toUpperCase() + word.substring(1).toLowerCase())
             .collect(Collectors.joining(" "));
     };

@@ -26,7 +26,8 @@ public final class Predicates {
     public static final Predicate<User> IS_ACTIVE = user -> 
         user != null && user.isActive();
     
-    public static final Predicate<User> IS_INACTIVE = IS_ACTIVE.negate();
+    public static final Predicate<User> IS_INACTIVE = user -> 
+        user != null && !user.isActive();
     
     public static final Predicate<User> IS_STUDENT = user -> 
         user instanceof Student;
@@ -182,12 +183,14 @@ public final class Predicates {
     public static final Predicate<Course> IS_FULL = course -> 
         course != null && course.getAvailableSeats() == 0;
     
-    public static final Predicate<Course> HAS_AVAILABILITY = IS_FULL.negate();
+    public static final Predicate<Course> HAS_AVAILABILITY = course -> 
+        course != null && course.getAvailableSeats() > 0;
     
     public static final Predicate<Course> HAS_PREREQUISITES = course -> 
         course != null && course.hasPrerequisites();
     
-    public static final Predicate<Course> NO_PREREQUISITES = HAS_PREREQUISITES.negate();
+    public static final Predicate<Course> NO_PREREQUISITES = course -> 
+        course != null && !course.hasPrerequisites();
     
     public static Predicate<Course> courseInDepartment(String departmentId) {
         return course -> course != null && course.getDepartmentId() != null &&

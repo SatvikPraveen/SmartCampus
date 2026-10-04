@@ -26,7 +26,10 @@ public abstract class BaseRepository<T, ID> implements Repository<T, ID> {
         
         ID id = extractId(entity);
         if (id == null) {
-            id = generateId();
+            // never hand out an id that an explicitly-identified entity already occupies
+            do {
+                id = generateId();
+            } while (storage.containsKey(id));
             setId(entity, id);
         }
         

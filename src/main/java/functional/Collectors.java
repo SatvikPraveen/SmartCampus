@@ -391,7 +391,8 @@ public final class Collectors {
      */
     public static <T> Collector<T, ?, List<T>> toTopN(int n, Comparator<T> comparator) {
         return Collector.of(
-            () -> new PriorityQueue<>(comparator.reversed()),
+            // min-heap: the head is the smallest retained element, which is evicted when over capacity
+            () -> new PriorityQueue<>(comparator),
             (queue, item) -> {
                 queue.add(item);
                 if (queue.size() > n) {

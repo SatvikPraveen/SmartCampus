@@ -65,9 +65,7 @@ public class DepartmentRepository extends BaseRepository<Department, String> {
      */
     public List<Department> findByHeadOfDepartment(String headId) {
         return findByPredicate(department -> 
-            department.getHeadOfDepartmentId() != null &&
-            department.getHeadOfDepartmentId().toLowerCase()
-                    .contains(headId.toLowerCase())
+            headId != null && headId.equals(department.getHeadOfDepartmentId())
         );
     }
     

@@ -457,9 +457,10 @@ public final class StreamUtils {
      * Converts stream to parallel if size exceeds threshold
      */
     public static <T> Stream<T> parallelIfLarge(Stream<T> stream, int threshold) {
-        long count = stream.count();
-        stream = stream.skip(0); // Reset stream
-        return count > threshold ? stream.parallel() : stream;
+        // A stream can only be traversed once, so buffer it to count it and re-stream the elements
+        List<T> elements = stream.collect(java.util.stream.Collectors.toList());
+        Stream<T> result = elements.stream();
+        return elements.size() > threshold ? result.parallel() : result;
     }
     
     /**
