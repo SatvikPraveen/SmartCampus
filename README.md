@@ -8,7 +8,7 @@
 [![CodeQL](https://github.com/SatvikPraveen/SmartCampus/actions/workflows/codeql.yml/badge.svg)](https://github.com/SatvikPraveen/SmartCampus/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21_LTS-orange.svg)](https://openjdk.org/projects/jdk/21/)
-[![Spring Boot 3.2](https://img.shields.io/badge/Spring_Boot-3.2-6DB33F.svg)](https://spring.io/projects/spring-boot)
+[![Spring Boot 3.5](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F.svg)](https://spring.io/projects/spring-boot)
 [![Tests](https://img.shields.io/badge/tests-1%2C980_passing-25A162.svg)](#testing-and-quality)
 [![Reproducible](https://img.shields.io/badge/benchmarks-seeded_%26_paired-8A2BE2.svg)](docs/research/timetabling.md)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-lightgrey.svg)](CITATION.cff)
