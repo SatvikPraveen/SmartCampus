@@ -362,7 +362,7 @@ public class StudentBuilder {
             .name(firstName + " " + lastName)
             .email(email)
             .gpa(2.0 + random.nextDouble() * 2.0) // GPA between 2.0 and 4.0
-            .phoneNumber("555-" + String.format("%04d", random.nextInt(9999)));
+            .phoneNumber("555-555-" + String.format("%04d", random.nextInt(10000))); // must satisfy the phone validation in build()
     }
     
     /**
