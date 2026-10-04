@@ -60,7 +60,7 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
         this.courseLimits = new ConcurrentHashMap<>();
         this.prerequisites = new ConcurrentHashMap<>();
         this.cachedStatistics = new HashMap<>();
-        this.lastStatisticsUpdate = LocalDateTime.now();
+        this.lastStatisticsUpdate = null; // nothing cached yet
     }
     
     // Core enrollment operations
@@ -79,6 +79,7 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
         
         // Create enrollment
         Enrollment enrollment = Enrollment.createEnrollment(studentId, courseId, semester, year);
+        ensureUniqueId(enrollment);
         enrollment.setEnrolledBy("SYSTEM");
         
         // Store enrollment
@@ -133,6 +134,7 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
         
         // Create waitlist enrollment
         Enrollment enrollment = Enrollment.createWaitlistedEnrollment(studentId, courseId, semester, year);
+        ensureUniqueId(enrollment);
         enrollment.setEnrolledBy("SYSTEM");
         
         // Store enrollment
@@ -260,8 +262,13 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
             return false;
         }
         
-        // Check if target course has availability
-        if (!hasAvailableSpots(toCourseId)) {
+        // Check the student is eligible for the target course before giving up the
+        // current seat: dropping processes the source waitlist, so the seat cannot
+        // reliably be reclaimed once released.
+        if (fromCourseId.equals(toCourseId) || isStudentEnrolled(studentId, toCourseId)) {
+            return false;
+        }
+        if (!hasAvailableSpots(toCourseId) || !checkPrerequisites(studentId, toCourseId)) {
             return false;
         }
         
@@ -322,6 +329,7 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
     public boolean setCourseLimit(String courseId, int limit) {
         if (ValidationUtil.isValidString(courseId) && limit > 0) {
             courseLimits.put(courseId, limit);
+            invalidateStatisticsCache();
             return true;
         }
         return false;
@@ -816,15 +824,26 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
      * Get all course enrollments (including dropped, completed, etc.).
      */
     private List<Enrollment> getAllCourseEnrollments(String courseId) {
-        List<String> allEnrollmentIds = new ArrayList<>();
-        allEnrollmentIds.addAll(courseEnrollments.getOrDefault(courseId, new ArrayList<>()));
-        allEnrollmentIds.addAll(waitlists.getOrDefault(courseId, new ArrayList<>()));
-        
-        return allEnrollmentIds.stream()
-                .map(enrollments::get)
-                .filter(Objects::nonNull)
+        // The courseEnrollments/waitlists indices drop records when students leave,
+        // so scan the master map to include dropped, withdrawn and completed records.
+        return enrollments.values().stream()
                 .filter(enrollment -> courseId.equals(enrollment.getCourseId()))
                 .collect(Collectors.toList());
+    }
+    
+    /**
+     * Enrollment IDs are derived from the wall clock (millis % 10000), so re-enrolling
+     * the same student in the same course quickly can reproduce an existing ID. Make the
+     * ID unique within this service so an earlier record is never overwritten.
+     */
+    private void ensureUniqueId(Enrollment enrollment) {
+        String baseId = enrollment.getEnrollmentId();
+        String candidate = baseId;
+        int suffix = 1;
+        while (enrollments.containsKey(candidate)) {
+            candidate = baseId + "_" + suffix++;
+        }
+        enrollment.setEnrollmentId(candidate);
     }
     
     /**

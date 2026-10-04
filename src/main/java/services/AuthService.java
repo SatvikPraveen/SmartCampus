@@ -449,6 +449,13 @@ public class AuthService implements Auditable {
             return false;
         }
         
+        // Never create credentials for an account that does not exist
+        if (targetUserId == null || findUserById(targetUserId).isEmpty()) {
+            logAuditEvent(AuditAction.MODIFY, AuditLevel.WARNING, targetUserId, adminUserId, 
+                         "Password reset failed: User not found");
+            return false;
+        }
+        
         // Update password
         userCredentials.put(targetUserId, hashPassword(newPassword));
         
@@ -577,6 +584,7 @@ public class AuthService implements Auditable {
      * Check if account is locked.
      */
     private boolean isAccountLocked(String username) {
+        username = normalizeUsername(username);
         LocalDateTime lockoutTime = accountLockouts.get(username);
         if (lockoutTime == null) {
             return false;
@@ -596,13 +604,14 @@ public class AuthService implements Auditable {
      * Increment login attempts for user.
      */
     private void incrementLoginAttempts(String username) {
-        loginAttempts.merge(username, 1, Integer::sum);
+        loginAttempts.merge(normalizeUsername(username), 1, Integer::sum);
     }
     
     /**
      * Reset login attempts for user.
      */
     private void resetLoginAttempts(String username) {
+        username = normalizeUsername(username);
         loginAttempts.remove(username);
         accountLockouts.remove(username);
     }
@@ -611,12 +620,22 @@ public class AuthService implements Auditable {
      * Check and lock account if too many failed attempts.
      */
     private void checkAndLockAccount(String username) {
+        username = normalizeUsername(username);
         int attempts = loginAttempts.getOrDefault(username, 0);
         if (attempts >= MAX_LOGIN_ATTEMPTS) {
             accountLockouts.put(username, LocalDateTime.now());
             logAuditEvent(AuditAction.OTHER, AuditLevel.SECURITY, username, "SYSTEM", 
                          "Account locked due to too many failed login attempts");
         }
+    }
+    
+    /**
+     * Normalise a username for attempt/lockout bookkeeping. Usernames are emails and are
+     * matched case-insensitively at login, so the counters must be keyed the same way;
+     * otherwise varying the case of the username bypasses the lockout.
+     */
+    private String normalizeUsername(String username) {
+        return username == null ? null : username.trim().toLowerCase();
     }
     
     /**

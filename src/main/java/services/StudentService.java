@@ -50,7 +50,7 @@ public class StudentService implements Searchable<Student>, Reportable {
         this.studentGrades = new ConcurrentHashMap<>();
         this.calculatedGPAs = new ConcurrentHashMap<>();
         this.cachedStatistics = new HashMap<>();
-        this.lastStatisticsUpdate = LocalDateTime.now();
+        this.lastStatisticsUpdate = null; // nothing cached yet
     }
     
     // Core CRUD operations

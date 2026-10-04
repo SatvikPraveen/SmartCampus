@@ -79,7 +79,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
         this.coursePrerequisites = new ConcurrentHashMap<>();
         this.waitlistCounts = new ConcurrentHashMap<>();
         this.cachedStatistics = new HashMap<>();
-        this.lastStatisticsUpdate = LocalDateTime.now();
+        this.lastStatisticsUpdate = null; // nothing cached yet
     }
     
     // Core CRUD operations with lambda expressions
@@ -399,6 +399,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
      */
     public boolean addPrerequisite(String courseId, String prerequisiteCourseId) {
         return getCourseById(courseId)
+                .filter(course -> !courseId.equals(prerequisiteCourseId))
                 .filter(course -> getCourseById(prerequisiteCourseId).isPresent())
                 .map(course -> {
                     coursePrerequisites.computeIfAbsent(courseId, k -> new ArrayList<>())
@@ -506,10 +507,12 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     public boolean enrollStudent(String studentId, String courseId, String semester, int year) {
         return getCourseById(courseId)
                 .filter(isActiveCourse.and(hasAvailableSeats))
+                .filter(course -> !isStudentEnrolled(studentId, courseId))
                 .map(course -> {
                     Enrollment enrollment = Enrollment.createEnrollment(studentId, courseId, semester, year);
                     courseEnrollments.computeIfAbsent(courseId, k -> new ArrayList<>()).add(enrollment);
                     enrollmentCounts.merge(courseId, 1, Integer::sum);
+                    invalidateStatisticsCache();
                     return true;
                 })
                 .orElse(false);
@@ -519,11 +522,13 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     public boolean dropStudent(String studentId, String courseId, String reason) {
         return Optional.ofNullable(courseEnrollments.get(courseId))
                 .map(enrollments -> enrollments.stream()
-                    .filter(enrollment -> studentId.equals(enrollment.getStudentId()))
+                    .filter(enrollment -> studentId.equals(enrollment.getStudentId()) &&
+                                        enrollment.getStatus() == Enrollment.EnrollmentStatus.ENROLLED)
                     .findFirst()
                     .map(enrollment -> {
                         enrollment.dropEnrollment(reason);
                         enrollmentCounts.merge(courseId, -1, Integer::sum);
+                        invalidateStatisticsCache();
                         return true;
                     })
                     .orElse(false))
@@ -534,10 +539,12 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     public boolean addToWaitlist(String studentId, String courseId, String semester, int year) {
         return getCourseById(courseId)
                 .filter(isActiveCourse)
+                .filter(course -> !isStudentEnrolled(studentId, courseId) && !isStudentWaitlisted(studentId, courseId))
                 .map(course -> {
                     Enrollment waitlistEnrollment = Enrollment.createWaitlistedEnrollment(studentId, courseId, semester, year);
                     courseEnrollments.computeIfAbsent(courseId, k -> new ArrayList<>()).add(waitlistEnrollment);
                     waitlistCounts.merge(courseId, 1, Integer::sum);
+                    invalidateStatisticsCache();
                     return true;
                 })
                 .orElse(false);
@@ -553,6 +560,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
                     .map(enrollment -> {
                         enrollments.remove(enrollment);
                         waitlistCounts.merge(courseId, -1, Integer::sum);
+                        invalidateStatisticsCache();
                         return true;
                     })
                     .orElse(false))
@@ -561,6 +569,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     
     @Override
     public int processWaitlist(String courseId, int numberOfStudents) {
+        invalidateStatisticsCache();
         return Optional.ofNullable(courseEnrollments.get(courseId))
                 .map(enrollments -> enrollments.stream()
                     .filter(enrollment -> enrollment.getStatus() == Enrollment.EnrollmentStatus.WAITLISTED)
@@ -636,6 +645,15 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     
     @Override
     public boolean transferStudent(String studentId, String fromCourseId, String toCourseId, String semester, int year) {
+        // Verify the target can accept the student before releasing the current seat;
+        // otherwise a failed transfer leaves the student enrolled nowhere.
+        boolean targetAccepts = getCourseById(toCourseId)
+                .filter(isActiveCourse.and(hasAvailableSeats))
+                .isPresent();
+        if (fromCourseId.equals(toCourseId) || !targetAccepts ||
+            !isStudentEnrolled(studentId, fromCourseId) || isStudentEnrolled(studentId, toCourseId)) {
+            return false;
+        }
         return dropStudent(studentId, fromCourseId, "Transfer to " + toCourseId) &&
                enrollStudent(studentId, toCourseId, semester, year);
     }

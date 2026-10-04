@@ -59,7 +59,7 @@ public class GradeService implements Searchable<Grade>, Reportable {
         this.gradeWeights = new ConcurrentHashMap<>();
         this.gradeScale = initializeGradeScale();
         this.cachedStatistics = new HashMap<>();
-        this.lastStatisticsUpdate = LocalDateTime.now();
+        this.lastStatisticsUpdate = null; // nothing cached yet
     }
     
     // Core grade management operations
@@ -109,9 +109,17 @@ public class GradeService implements Searchable<Grade>, Reportable {
         Grade existingGrade = grades.get(grade.getGradeId());
         grades.put(grade.getGradeId(), grade);
         
-        // Invalidate cached GPA if student changed
-        calculatedGPAs.remove(existingGrade.getStudentId());
-        if (!existingGrade.getStudentId().equals(grade.getStudentId())) {
+        // Keep the student/course/enrollment indices in sync when ownership changes
+        String gradeId = grade.getGradeId();
+        reindex(studentGrades, existingGrade.getStudentId(), grade.getStudentId(), gradeId);
+        reindex(courseGrades, existingGrade.getCourseId(), grade.getCourseId(), gradeId);
+        reindex(enrollmentGrades, existingGrade.getEnrollmentId(), grade.getEnrollmentId(), gradeId);
+        
+        // Invalidate cached GPA for both the previous and the current student
+        if (existingGrade.getStudentId() != null) {
+            calculatedGPAs.remove(existingGrade.getStudentId());
+        }
+        if (grade.getStudentId() != null) {
             calculatedGPAs.remove(grade.getStudentId());
         }
         
@@ -202,7 +210,12 @@ public class GradeService implements Searchable<Grade>, Reportable {
         }
         
         Grade grade = Grade.createGrade(null, studentId, courseId, assignmentName, component, pointsPossible);
-        grade.gradeAssignment(pointsEarned, gradedBy, feedback);
+        // A new grade starts as DRAFT, which Grade.gradeAssignment refuses to grade;
+        // record the submission first so the points are actually applied.
+        grade.submitAssignment();
+        if (!grade.gradeAssignment(pointsEarned, gradedBy, feedback)) {
+            return false;
+        }
         
         return addGrade(grade);
     }
@@ -218,8 +231,8 @@ public class GradeService implements Searchable<Grade>, Reportable {
      */
     public boolean updateGradePoints(String gradeId, double pointsEarned, String gradedBy, String feedback) {
         return getGradeById(gradeId)
+                .filter(grade -> grade.gradeAssignment(pointsEarned, gradedBy, feedback))
                 .map(grade -> {
-                    grade.gradeAssignment(pointsEarned, gradedBy, feedback);
                     calculatedGPAs.remove(grade.getStudentId());
                     invalidateStatisticsCache();
                     return true;
@@ -235,7 +248,7 @@ public class GradeService implements Searchable<Grade>, Reportable {
      */
     public boolean submitAssignment(String gradeId) {
         return getGradeById(gradeId)
-                .map(grade -> grade.submitAssignment())
+                .map(grade -> gradeChanged(grade, grade.submitAssignment()))
                 .orElse(false);
     }
     
@@ -247,7 +260,7 @@ public class GradeService implements Searchable<Grade>, Reportable {
      */
     public boolean returnGradedAssignment(String gradeId) {
         return getGradeById(gradeId)
-                .map(grade -> grade.returnToStudent())
+                .map(grade -> gradeChanged(grade, grade.returnToStudent()))
                 .orElse(false);
     }
     
@@ -260,8 +273,37 @@ public class GradeService implements Searchable<Grade>, Reportable {
      */
     public boolean excuseAssignment(String gradeId, String reason) {
         return getGradeById(gradeId)
-                .map(grade -> grade.excuseAssignment(reason))
+                .map(grade -> gradeChanged(grade, grade.excuseAssignment(reason)))
                 .orElse(false);
+    }
+    
+    /**
+     * Invalidate caches derived from a grade after a successful state transition.
+     */
+    private boolean gradeChanged(Grade grade, boolean changed) {
+        if (changed) {
+            calculatedGPAs.remove(grade.getStudentId());
+            invalidateStatisticsCache();
+        }
+        return changed;
+    }
+    
+    /**
+     * Move a grade ID from one index bucket to another when its key changes.
+     */
+    private void reindex(Map<String, List<String>> index, String oldKey, String newKey, String gradeId) {
+        if (Objects.equals(oldKey, newKey)) {
+            return;
+        }
+        if (oldKey != null) {
+            List<String> ids = index.get(oldKey);
+            if (ids != null) {
+                ids.remove(gradeId);
+            }
+        }
+        if (newKey != null) {
+            index.computeIfAbsent(newKey, k -> new ArrayList<>()).add(gradeId);
+        }
     }
     
     // Advanced query operations using Stream API
@@ -326,7 +368,9 @@ public class GradeService implements Searchable<Grade>, Reportable {
      */
     public List<Grade> getFailingGrades() {
         return grades.values().stream()
-                .filter(grade -> grade.getPercentage() >= 0 && grade.getPercentage() < passingGrade)
+                // Ungraded entries have no letter grade (and a default percentage of 0),
+                // so only consider grades that have actually been scored.
+                .filter(grade -> grade.getLetterGrade() != null && grade.getPercentage() < passingGrade)
                 .collect(Collectors.toList());
     }
     
