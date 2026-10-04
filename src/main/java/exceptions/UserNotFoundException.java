@@ -107,6 +107,18 @@ public class UserNotFoundException extends RuntimeException {
         this.searchCriteria = userId;
     }
     
+    /**
+     * Copy constructor used by {@link #withContext(String)}: keeps the message verbatim
+     * and preserves the user context fields.
+     */
+    private UserNotFoundException(String message, Throwable cause, String userId,
+                                  String userType, String searchCriteria) {
+        super(message, cause);
+        this.userId = userId;
+        this.userType = userType;
+        this.searchCriteria = searchCriteria;
+    }
+    
     // Static factory methods for common scenarios
     
     /**
@@ -319,8 +331,7 @@ public class UserNotFoundException extends RuntimeException {
      */
     public UserNotFoundException withContext(String additionalContext) {
         String newMessage = getMessage() + " Additional context: " + additionalContext;
-        UserNotFoundException newException = new UserNotFoundException(newMessage, getCause());
-        return newException;
+        return new UserNotFoundException(newMessage, getCause(), userId, userType, searchCriteria);
     }
     
     /**
@@ -328,7 +339,7 @@ public class UserNotFoundException extends RuntimeException {
      * @return true if the message contains authentication-related keywords
      */
     public boolean isAuthenticationRelated() {
-        String message = getMessage().toLowerCase();
+        String message = getMessage() != null ? getMessage().toLowerCase() : "";
         return message.contains("authentication") || 
                message.contains("login") || 
                message.contains("credentials");
@@ -339,7 +350,7 @@ public class UserNotFoundException extends RuntimeException {
      * @return true if the message contains enrollment-related keywords
      */
     public boolean isEnrollmentRelated() {
-        String message = getMessage().toLowerCase();
+        String message = getMessage() != null ? getMessage().toLowerCase() : "";
         return message.contains("enrollment") || 
                message.contains("enroll") || 
                message.contains("course");

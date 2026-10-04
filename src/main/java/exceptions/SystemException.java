@@ -199,7 +199,7 @@ public class SystemException extends Exception {
                          String operation, String message, Throwable cause) {
         super(buildDetailedMessage(errorCode, componentType, componentName, operation, message), cause);
         this.errorCode = errorCode;
-        this.componentType = componentType;
+        this.componentType = componentType != null ? componentType : ComponentType.UNKNOWN;
         this.componentName = componentName;
         this.operation = operation;
         this.timestamp = LocalDateTime.now();
@@ -219,7 +219,7 @@ public class SystemException extends Exception {
                          String message, Throwable cause) {
         super(buildDetailedMessage(errorCode, componentType, componentName, operation, message), cause);
         this.errorCode = errorCode;
-        this.componentType = componentType;
+        this.componentType = componentType != null ? componentType : ComponentType.UNKNOWN;
         this.componentName = componentName;
         this.operation = operation;
         this.timestamp = LocalDateTime.now();
@@ -595,7 +595,7 @@ public class SystemException extends Exception {
         
         // Add context information
         StringBuilder context = new StringBuilder();
-        if (componentType != ComponentType.UNKNOWN) {
+        if (componentType != null && componentType != ComponentType.UNKNOWN) {
             context.append("Component: ").append(componentType.getDisplayName());
         }
         if (componentName != null) {

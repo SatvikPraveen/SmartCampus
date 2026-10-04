@@ -598,19 +598,8 @@ public class DatabaseException extends Exception {
      * Maps SQL error codes to DatabaseException error codes
      */
     private static ErrorCode mapSqlErrorCode(int sqlErrorCode, String sqlState) {
-        // PostgreSQL error codes
-        if (sqlState != null) {
-            switch (sqlState.substring(0, 2)) {
-                case "08": return ErrorCode.CONNECTION_FAILED;
-                case "23": return ErrorCode.CONSTRAINT_VIOLATION;
-                case "42": return ErrorCode.INVALID_SQL_SYNTAX;
-                case "53": return ErrorCode.DISK_FULL;
-                case "57": return ErrorCode.PERMISSION_DENIED;
-                case "40": return ErrorCode.DEADLOCK_DETECTED;
-            }
-        }
-        
-        // MySQL error codes
+        // MySQL vendor error codes are more specific than their SQLState class
+        // (e.g. 1062 and 1452 both report SQLState 23000), so check them first.
         switch (sqlErrorCode) {
             case 1044: case 1045: return ErrorCode.PERMISSION_DENIED;
             case 1062: return ErrorCode.UNIQUE_CONSTRAINT_VIOLATION;
@@ -619,8 +608,23 @@ public class DatabaseException extends Exception {
             case 1452: return ErrorCode.FOREIGN_KEY_VIOLATION;
             case 1213: return ErrorCode.DEADLOCK_DETECTED;
             case 1205: return ErrorCode.LOCK_TIMEOUT;
-            default: return ErrorCode.UNKNOWN_ERROR;
+            default: break;
         }
+        
+        // Standard SQLState classes (e.g. PostgreSQL)
+        if (sqlState != null && sqlState.length() >= 2) {
+            switch (sqlState.substring(0, 2)) {
+                case "08": return ErrorCode.CONNECTION_FAILED;
+                case "23": return ErrorCode.CONSTRAINT_VIOLATION;
+                case "42": return ErrorCode.INVALID_SQL_SYNTAX;
+                case "53": return ErrorCode.DISK_FULL;
+                case "57": return ErrorCode.PERMISSION_DENIED;
+                case "40": return ErrorCode.DEADLOCK_DETECTED;
+                default: break;
+            }
+        }
+        
+        return ErrorCode.UNKNOWN_ERROR;
     }
     
     // ==================== SERIALIZATION SUPPORT ====================

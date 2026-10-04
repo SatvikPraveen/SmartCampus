@@ -563,7 +563,8 @@ public class ValidationException extends Exception {
         String baseMessage = buildMessage(errors);
         
         if (objectName != null && !objectName.trim().isEmpty()) {
-            return "Validation failed for " + objectName + ": " + 
+            // baseMessage already continues with ": ..." or " with N errors: ..."
+            return "Validation failed for " + objectName +
                    baseMessage.substring("Validation failed".length());
         }
         

@@ -119,6 +119,18 @@ public class InvalidInputException extends RuntimeException {
         this.errorCode = errorCode;
     }
     
+    /**
+     * Copy constructor used by {@link #withContext(String)}: keeps the message verbatim
+     * instead of re-applying the "[code] Invalid value for field" template.
+     */
+    private InvalidInputException(String message, Throwable cause, String errorCode,
+                                  String fieldName, Object invalidValue) {
+        super(message, cause);
+        this.fieldName = fieldName;
+        this.invalidValue = invalidValue;
+        this.errorCode = errorCode;
+    }
+    
     // Static factory methods for common scenarios
     
     /**
@@ -298,7 +310,7 @@ public class InvalidInputException extends RuntimeException {
      */
     public InvalidInputException withContext(String additionalContext) {
         String newMessage = getMessage() + " Context: " + additionalContext;
-        return new InvalidInputException(errorCode, fieldName, invalidValue, newMessage, getCause());
+        return new InvalidInputException(newMessage, getCause(), errorCode, fieldName, invalidValue);
     }
     
     @Override

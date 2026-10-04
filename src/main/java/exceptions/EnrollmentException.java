@@ -419,11 +419,15 @@ public class EnrollmentException extends Exception {
                 break;
             case PREREQUISITE_NOT_MET:
                 String prerequisite = getAdditionalData("missingPrerequisite", String.class);
-                message.append("You need to complete ").append(prerequisite).append(" before enrolling in this course.");
+                message.append(prerequisite != null
+                        ? "You need to complete " + prerequisite + " before enrolling in this course."
+                        : errorCode.getDescription());
                 break;
             case SCHEDULE_CONFLICT:
                 String conflictingCourse = getAdditionalData("conflictingCourse", String.class);
-                message.append("This course conflicts with your enrollment in ").append(conflictingCourse).append(".");
+                message.append(conflictingCourse != null
+                        ? "This course conflicts with your enrollment in " + conflictingCourse + "."
+                        : errorCode.getDescription());
                 break;
             case DUPLICATE_ENROLLMENT:
                 message.append("You are already enrolled in this course.");
@@ -433,15 +437,21 @@ public class EnrollmentException extends Exception {
                 break;
             case CREDIT_LIMIT_EXCEEDED:
                 Integer maxCredits = getAdditionalData("maxCredits", Integer.class);
-                message.append("Enrolling in this course would exceed your maximum credit limit of ").append(maxCredits).append(" hours.");
+                message.append(maxCredits != null
+                        ? "Enrolling in this course would exceed your maximum credit limit of " + maxCredits + " hours."
+                        : errorCode.getDescription());
                 break;
             case PAYMENT_REQUIRED:
                 Double amountDue = getAdditionalData("amountDue", Double.class);
-                message.append("Please make a payment of $").append(String.format("%.2f", amountDue)).append(" to complete enrollment.");
+                message.append(amountDue != null
+                        ? "Please make a payment of $" + String.format("%.2f", amountDue) + " to complete enrollment."
+                        : errorCode.getDescription());
                 break;
             case HOLD_ON_ACCOUNT:
                 String holdType = getAdditionalData("holdType", String.class);
-                message.append("You have a ").append(holdType).append(" hold on your account that prevents enrollment.");
+                message.append(holdType != null
+                        ? "You have a " + holdType + " hold on your account that prevents enrollment."
+                        : errorCode.getDescription());
                 break;
             default:
                 message.append(errorCode.getDescription());
