@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * AuthService class providing authentication and authorization services.
@@ -112,7 +113,9 @@ public class AuthService implements Auditable {
         this.activeSessions = new ConcurrentHashMap<>();
         this.loginAttempts = new ConcurrentHashMap<>();
         this.accountLockouts = new ConcurrentHashMap<>();
-        this.auditRecords = new ArrayList<>();
+        // Audit events are written from every (possibly concurrent) login/access check
+        // and read via streams, so the log must tolerate concurrent writes and iteration.
+        this.auditRecords = new CopyOnWriteArrayList<>();
         initializeDefaultAdmin();
     }
     
@@ -240,7 +243,16 @@ public class AuthService implements Auditable {
                          "Token authentication failed: User not found");
             return new AuthenticationResult(AuthResult.USER_NOT_FOUND, null, null);
         }
-        
+
+        // An account disabled after the session was created must not keep access
+        if (!userOpt.get().isActive()) {
+            activeSessions.remove(sessionToken);
+            session.invalidate();
+            logAuditEvent(AuditAction.ACCESS, AuditLevel.SECURITY, session.getUserId(), session.getUserId(),
+                         "Token authentication failed: Account disabled");
+            return new AuthenticationResult(AuthResult.ACCOUNT_DISABLED, null, userOpt.get());
+        }
+
         return new AuthenticationResult(AuthResult.SUCCESS, session, userOpt.get());
     }
     
@@ -918,10 +930,11 @@ public class AuthService implements Auditable {
                     if (!record.getLevel().toString().equals(value.toString())) return false;
                     break;
                 case "userId":
-                    if (!record.getUserId().equals(value.toString())) return false;
+                    // System/anonymous records carry a null userId or entityId
+                    if (!value.toString().equals(record.getUserId())) return false;
                     break;
                 case "entityId":
-                    if (!record.getEntityId().equals(value.toString())) return false;
+                    if (!value.toString().equals(record.getEntityId())) return false;
                     break;
             }
         }
