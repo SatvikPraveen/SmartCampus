@@ -94,13 +94,13 @@ public class EventManager {
      * Unsubscribe from events
      */
     public <T extends Event> void unsubscribe(Class<T> eventType, EventListener<T> listener) {
-        Set<EventListener<?>> eventListeners = listeners.get(eventType);
-        if (eventListeners != null) {
-            eventListeners.remove(listener);
-            if (eventListeners.isEmpty()) {
-                listeners.remove(eventType);
-            }
-        }
+        listeners.computeIfPresent(eventType, (type, eventListeners) -> {
+            // Listeners subscribed with a priority are stored wrapped, so match on the delegate too
+            eventListeners.removeIf(registered -> registered.equals(listener)
+                || (registered instanceof PriorityEventListener
+                    && Objects.equals(((PriorityEventListener<?>) registered).delegate, listener)));
+            return eventListeners.isEmpty() ? null : eventListeners;
+        });
     }
     
     /**
@@ -176,6 +176,10 @@ public class EventManager {
             
         } catch (Exception e) {
             recordEventExecution(event, listener, 0, e);
+            EventStatistics stats = eventStats.get(event.getClass().getSimpleName());
+            if (stats != null) {
+                stats.incrementErrorCount();
+            }
             handleEventProcessingError(event, listener, e);
         }
     }
