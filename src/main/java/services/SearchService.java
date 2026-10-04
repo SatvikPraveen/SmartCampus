@@ -219,14 +219,16 @@ public class SearchService {
         }
         
         Set<SearchSuggestion> suggestions = new HashSet<>();
+        // Each service may contribute up to the full limit; the merged set is ranked and
+        // truncated below. (Dividing by 6 yielded zero suggestions for maxSuggestions < 6.)
         
         // Get suggestions from each service
-        suggestions.addAll(getServiceSuggestions("students", studentService, partialQuery, maxSuggestions / 6));
-        suggestions.addAll(getServiceSuggestions("professors", professorService, partialQuery, maxSuggestions / 6));
-        suggestions.addAll(getServiceSuggestions("courses", courseService, partialQuery, maxSuggestions / 6));
-        suggestions.addAll(getServiceSuggestions("departments", departmentService, partialQuery, maxSuggestions / 6));
-        suggestions.addAll(getServiceSuggestions("enrollments", enrollmentService, partialQuery, maxSuggestions / 6));
-        suggestions.addAll(getServiceSuggestions("grades", gradeService, partialQuery, maxSuggestions / 6));
+        suggestions.addAll(getServiceSuggestions("students", studentService, partialQuery, maxSuggestions));
+        suggestions.addAll(getServiceSuggestions("professors", professorService, partialQuery, maxSuggestions));
+        suggestions.addAll(getServiceSuggestions("courses", courseService, partialQuery, maxSuggestions));
+        suggestions.addAll(getServiceSuggestions("departments", departmentService, partialQuery, maxSuggestions));
+        suggestions.addAll(getServiceSuggestions("enrollments", enrollmentService, partialQuery, maxSuggestions));
+        suggestions.addAll(getServiceSuggestions("grades", gradeService, partialQuery, maxSuggestions));
         
         return suggestions.stream()
                 .sorted(Comparator.comparing(SearchSuggestion::getScore).reversed())
@@ -588,10 +590,18 @@ public class SearchService {
         String lowerQuery = query.toLowerCase();
         String lowerText = text.toLowerCase();
         
-        // Simple similarity calculation using Levenshtein distance
-        int distance = calculateLevenshteinDistance(lowerQuery, lowerText);
-        int maxLength = Math.max(lowerQuery.length(), lowerText.length());
-        
+        // Compare against the whole text and against each word: the search text of an entity
+        // concatenates many fields, so whole-text similarity alone can never reach a useful threshold.
+        double best = levenshteinSimilarity(lowerQuery, lowerText);
+        for (String word : lowerText.split("\\s+")) {
+            best = Math.max(best, levenshteinSimilarity(lowerQuery, word));
+        }
+        return best;
+    }
+    
+    private double levenshteinSimilarity(String a, String b) {
+        int distance = calculateLevenshteinDistance(a, b);
+        int maxLength = Math.max(a.length(), b.length());
         return maxLength > 0 ? 1.0 - (double) distance / maxLength : 0.0;
     }
     
@@ -666,7 +676,8 @@ public class SearchService {
         } else if (entity instanceof Course) {
             return ((Course) entity).getDepartmentId();
         } else if (entity instanceof Department) {
-            return ((Department) entity).getLocation();
+            // Location is optional; a null facet value would make groupingBy throw
+            return Objects.toString(((Department) entity).getLocation(), "unknown");
         }
         return "unknown";
     }
