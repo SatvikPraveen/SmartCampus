@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.*;
 import java.nio.file.Files;
@@ -29,7 +30,16 @@ public class JsonProcessor {
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        // Entities expose derived read-only getters (e.g. role, overdue) that are serialized but have
+        // no setter; ignore them on read so that what this class writes can be read back.
+        objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        // Grade.setPointsEarned only accepts values <= pointsPossible, so pointsPossible must be
+        // written (and therefore read back) first, otherwise earned points are silently dropped.
+        objectMapper.addMixIn(Grade.class, GradePropertyOrder.class);
     }
+
+    @com.fasterxml.jackson.annotation.JsonPropertyOrder({"pointsPossible", "pointsEarned"})
+    private abstract static class GradePropertyOrder { }
     
     /**
      * Serialize object to JSON string
@@ -407,7 +417,11 @@ public class JsonProcessor {
                 try {
                     String fileName = entry.getKey();
                     String content = entry.getValue().asText();
-                    Path outputFile = restoreDirectory.resolve(fileName);
+                    Path outputFile = restoreDirectory.resolve(fileName).normalize();
+                    // Reject names that would escape the restore directory (e.g. "../x.json")
+                    if (!outputFile.startsWith(restoreDirectory.normalize())) {
+                        throw new IOException("Backup entry is outside of the restore directory: " + fileName);
+                    }
                     Files.writeString(outputFile, content, StandardCharsets.UTF_8);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to restore file: " + entry.getKey(), e);
