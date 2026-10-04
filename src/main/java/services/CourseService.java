@@ -114,7 +114,7 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
      */
     public boolean updateCourse(Course course) {
         return Optional.ofNullable(course)
-                .filter(c -> courses.containsKey(c.getCourseId()))
+                .filter(c -> c.getCourseId() != null && courses.containsKey(c.getCourseId()))
                 .map(c -> {
                     courses.put(c.getCourseId(), c);
                     invalidateStatisticsCache();
@@ -353,8 +353,10 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
         statistics.put("activeCourses", activeCourses.size());
         statistics.put("totalEnrollments", getTotalEnrollments());
         statistics.put("averageEnrollmentRate", enrollmentStats.getAverage());
-        statistics.put("minEnrollmentRate", enrollmentStats.getMin());
-        statistics.put("maxEnrollmentRate", enrollmentStats.getMax());
+        // An empty summary reports +/-Infinity for min/max; report 0 when there are no active courses
+        boolean hasActive = enrollmentStats.getCount() > 0;
+        statistics.put("minEnrollmentRate", hasActive ? enrollmentStats.getMin() : 0.0);
+        statistics.put("maxEnrollmentRate", hasActive ? enrollmentStats.getMax() : 0.0);
         statistics.put("averageCreditHours", creditStats.getAverage());
         statistics.put("totalCreditHours", creditStats.getSum());
         statistics.put("coursesByDepartment", getCourseCountByDepartment());
@@ -697,11 +699,13 @@ public class CourseService implements Searchable<Course>, Reportable, Enrollable
     @Override
     public List<Course> search(String keyword) {
         String lowerKeyword = keyword.toLowerCase();
-        Predicate<Course> matchesKeyword = course -> 
-            course.getCourseName().toLowerCase().contains(lowerKeyword) ||
-            course.getCourseCode().toLowerCase().contains(lowerKeyword) ||
-            course.getDescription().toLowerCase().contains(lowerKeyword) ||
-            course.getDepartmentId().toLowerCase().contains(lowerKeyword);
+        // Description and department are optional on Course, so match them null-safely
+        Predicate<String> contains = value -> value != null && value.toLowerCase().contains(lowerKeyword);
+        Predicate<Course> matchesKeyword = course ->
+            contains.test(course.getCourseName()) ||
+            contains.test(course.getCourseCode()) ||
+            contains.test(course.getDescription()) ||
+            contains.test(course.getDepartmentId());
         
         return courses.values().stream()
                 .filter(matchesKeyword)
