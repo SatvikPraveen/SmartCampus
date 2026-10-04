@@ -1,0 +1,20 @@
+name: Research proposal
+description: Propose a solver, constraint or experiment
+labels: [research]
+body:
+  - type: textarea
+    attributes:
+      label: Hypothesis
+      description: What do you expect to observe, and why?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Falsification criterion
+      description: Which observation would show the hypothesis is wrong?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Baselines and controls
+      description: Which existing solvers/instances does this need to beat, and under which budget?

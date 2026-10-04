@@ -206,3 +206,5 @@ yarn-error.log*
 /docs/site/
 # API documentation
 /api-docs/generated/
+# Claude Code local worktrees
+.claude/
