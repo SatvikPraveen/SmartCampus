@@ -32,9 +32,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The built-in commands obtain their services from {@link ServiceFactory#getDefaultFactory()}. Each test installs a
- * fresh {@link CachedServiceFactory} as the default so that all commands in a test share the same (empty) services,
- * and restores the original registration afterwards so no state leaks between tests.
+ * A processor creates its services once from {@link ServiceFactory#getDefaultFactory()} and shares them between all
+ * of its commands. Each test installs a fresh {@link CachedServiceFactory} as the default so that the test can reach
+ * the same (empty) services, and restores the original registration afterwards so no state leaks between tests.
  */
 class CommandProcessorTest {
 
@@ -334,6 +334,45 @@ class CommandProcessorTest {
             assertThat(stats.getTotalCommands()).isZero();
             assertThat(stats.getUndoStackSize()).isZero();
             assertThat(stats.getRedoStackSize()).isZero();
+        }
+    }
+
+    @Nested
+    class SharedServices {
+
+        // Regression: with a factory that builds a new service per call (the STANDARD default), each
+        // command got its own empty service, so DELETE could never see what CREATE had added.
+        @Test
+        void commandsFromOneProcessorShareTheirServices() {
+            CommandProcessor standard = new CommandProcessor(100, ServiceFactory.getFactory(ServiceType.STANDARD));
+            try {
+                standard.execute(standard.createCommand("CREATE_STUDENT", Map.of("student", student("STU000001"))));
+                assertThat(standard.getStudentService().getStudentById("STU000001")).isPresent();
+
+                CommandResult deleted = standard.execute(
+                        standard.createCommand("DELETE_STUDENT", Map.of("studentId", "STU000001")));
+
+                assertThat(deleted.isSuccess()).isTrue();
+                assertThat(standard.getStudentService().getStudentById("STU000001")).isEmpty();
+            } finally {
+                standard.shutdown();
+            }
+        }
+
+        @Test
+        void separateProcessorsKeepSeparateData() {
+            ServiceFactory factory = ServiceFactory.getFactory(ServiceType.STANDARD);
+            CommandProcessor a = new CommandProcessor(100, factory);
+            CommandProcessor b = new CommandProcessor(100, factory);
+            try {
+                a.execute(a.createCommand("CREATE_STUDENT", Map.of("student", student("STU000002"))));
+
+                assertThat(a.getStudentService().getStudentById("STU000002")).isPresent();
+                assertThat(b.getStudentService().getStudentById("STU000002")).isEmpty();
+            } finally {
+                a.shutdown();
+                b.shutdown();
+            }
         }
     }
 

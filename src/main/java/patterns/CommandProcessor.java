@@ -22,12 +22,29 @@ public class CommandProcessor {
     private final CommandValidator validator;
     private final int maxHistorySize;
     
+    // Shared by every command this processor creates, so that commands see each other's data
+    private final StudentService studentService;
+    private final CourseService courseService;
+    private final EnrollmentService enrollmentService;
+    private final GradeService gradeService;
+    
     public CommandProcessor() {
         this(1000); // Default history size
     }
     
     public CommandProcessor(int maxHistorySize) {
+        this(maxHistorySize, ServiceFactory.getDefaultFactory());
+    }
+    
+    /**
+     * Creates a processor whose commands all operate on one set of services from {@code serviceFactory}.
+     */
+    public CommandProcessor(int maxHistorySize, ServiceFactory serviceFactory) {
         this.maxHistorySize = maxHistorySize;
+        this.studentService = serviceFactory.createStudentService();
+        this.courseService = serviceFactory.createCourseService();
+        this.enrollmentService = serviceFactory.createEnrollmentService();
+        this.gradeService = serviceFactory.createGradeService();
         this.commandHistory = new LinkedList<>();
         this.undoStack = new Stack<>();
         this.redoStack = new Stack<>();
@@ -220,6 +237,11 @@ public class CommandProcessor {
             new RestoreDataCommand((String) params.get("backupPath")));
     }
     
+    public StudentService getStudentService() { return studentService; }
+    public CourseService getCourseService() { return courseService; }
+    public EnrollmentService getEnrollmentService() { return enrollmentService; }
+    public GradeService getGradeService() { return gradeService; }
+    
     /**
      * Get command history
      */
@@ -341,7 +363,7 @@ public class CommandProcessor {
         
         public CreateStudentCommand(Student student) {
             this.student = student;
-            this.studentService = ServiceFactory.getDefaultFactory().createStudentService();
+            this.studentService = CommandProcessor.this.studentService;
         }
         
         @Override
@@ -378,7 +400,7 @@ public class CommandProcessor {
         
         public UpdateStudentCommand(Student student) {
             this.newStudent = student;
-            this.studentService = ServiceFactory.getDefaultFactory().createStudentService();
+            this.studentService = CommandProcessor.this.studentService;
         }
         
         @Override
@@ -416,7 +438,7 @@ public class CommandProcessor {
         
         public DeleteStudentCommand(String studentId) {
             this.studentId = studentId;
-            this.studentService = ServiceFactory.getDefaultFactory().createStudentService();
+            this.studentService = CommandProcessor.this.studentService;
         }
         
         @Override
@@ -453,7 +475,7 @@ public class CommandProcessor {
         
         public CreateCourseCommand(Course course) {
             this.course = course;
-            this.courseService = ServiceFactory.getDefaultFactory().createCourseService();
+            this.courseService = CommandProcessor.this.courseService;
         }
         
         @Override
@@ -490,7 +512,7 @@ public class CommandProcessor {
         
         public UpdateCourseCommand(Course course) {
             this.newCourse = course;
-            this.courseService = ServiceFactory.getDefaultFactory().createCourseService();
+            this.courseService = CommandProcessor.this.courseService;
         }
         
         @Override
@@ -527,7 +549,7 @@ public class CommandProcessor {
         
         public DeleteCourseCommand(String courseCode) {
             this.courseCode = courseCode;
-            this.courseService = ServiceFactory.getDefaultFactory().createCourseService();
+            this.courseService = CommandProcessor.this.courseService;
         }
         
         @Override
@@ -566,7 +588,7 @@ public class CommandProcessor {
         public EnrollStudentCommand(Student student, Course course) {
             this.student = student;
             this.course = course;
-            this.enrollmentService = ServiceFactory.getDefaultFactory().createEnrollmentService();
+            this.enrollmentService = CommandProcessor.this.enrollmentService;
         }
         
         @Override
@@ -605,7 +627,7 @@ public class CommandProcessor {
         public UnenrollStudentCommand(Student student, Course course) {
             this.student = student;
             this.course = course;
-            this.enrollmentService = ServiceFactory.getDefaultFactory().createEnrollmentService();
+            this.enrollmentService = CommandProcessor.this.enrollmentService;
         }
         
         @Override
@@ -648,7 +670,7 @@ public class CommandProcessor {
             this.student = student;
             this.course = course;
             this.newGrade = grade;
-            this.gradeService = ServiceFactory.getDefaultFactory().createGradeService();
+            this.gradeService = CommandProcessor.this.gradeService;
         }
         
         @Override
