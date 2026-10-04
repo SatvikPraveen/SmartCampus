@@ -23,22 +23,22 @@ public class FileUtil {
     private static final String BACKUP_DIRECTORY = "backup";
     private static final String TEMP_DIRECTORY = "temp";
     
-    // Initialize directories on class load
-    static {
-        initializeDirectories();
+    // Base directory under which the backup/ and temp/ directories live (default: working directory).
+    // Directories are created lazily when first needed rather than as a side effect of class loading.
+    private static volatile Path baseDirectory = Paths.get("");
+    
+    /**
+     * Set the base directory under which the backup and temp directories are resolved
+     */
+    public static void setBaseDirectory(Path directory) {
+        baseDirectory = Objects.requireNonNull(directory, "directory");
     }
     
     /**
-     * Initialize required directories
+     * Get the base directory under which the backup and temp directories are resolved
      */
-    private static void initializeDirectories() {
-        try {
-            Files.createDirectories(Paths.get(DATA_DIRECTORY));
-            Files.createDirectories(Paths.get(BACKUP_DIRECTORY));
-            Files.createDirectories(Paths.get(TEMP_DIRECTORY));
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to initialize directories", e);
-        }
+    public static Path getBaseDirectory() {
+        return baseDirectory;
     }
     
     /**
@@ -263,7 +263,7 @@ public class FileUtil {
         String fileName = filePath.getFileName().toString();
         String backupFileName = fileName + "_backup_" + timestamp;
         
-        Path backupPath = Paths.get(BACKUP_DIRECTORY, backupFileName);
+        Path backupPath = baseDirectory.resolve(BACKUP_DIRECTORY).resolve(backupFileName);
         copyFile(filePath, backupPath);
         
         return backupPath;
@@ -352,7 +352,11 @@ public class FileUtil {
             
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                Path outputPath = destinationDirectory.resolve(entry.getName());
+                Path outputPath = destinationDirectory.resolve(entry.getName()).normalize();
+                // Reject entries that would escape the destination directory ("zip slip")
+                if (!outputPath.startsWith(destinationDirectory.normalize())) {
+                    throw new IOException("ZIP entry is outside of the target directory: " + entry.getName());
+                }
                 
                 if (entry.isDirectory()) {
                     createDirectoriesIfNotExists(outputPath);
@@ -406,14 +410,16 @@ public class FileUtil {
      * Get temporary file path
      */
     public static Path createTempFile(String prefix, String suffix) throws IOException {
-        return Files.createTempFile(Paths.get(TEMP_DIRECTORY), prefix, suffix);
+        Path tempDir = baseDirectory.resolve(TEMP_DIRECTORY);
+        createDirectoriesIfNotExists(tempDir);
+        return Files.createTempFile(tempDir, prefix, suffix);
     }
     
     /**
      * Clean up temporary files older than specified days
      */
     public static void cleanupTempFiles(int daysOld) throws IOException {
-        Path tempDir = Paths.get(TEMP_DIRECTORY);
+        Path tempDir = baseDirectory.resolve(TEMP_DIRECTORY);
         if (!Files.exists(tempDir)) {
             return;
         }
