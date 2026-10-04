@@ -14,7 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DynamicProxy {
     
-    private static final Map<Class<?>, Object> proxyCache = new ConcurrentHashMap<>();
+    // Keyed by target identity: a proxy must only be reused for the very same target instance
+    private static final Map<Object, Object> proxyCache = Collections.synchronizedMap(new IdentityHashMap<>());
     private static final AnnotationProcessor annotationProcessor = new AnnotationProcessor();
     
     // ==================== PROXY CREATION METHODS ====================
@@ -26,9 +27,10 @@ public class DynamicProxy {
     public static <T> T createProxy(T target) {
         Class<?> targetClass = target.getClass();
         
-        // Check if proxy already exists
-        if (proxyCache.containsKey(targetClass)) {
-            return (T) proxyCache.get(targetClass);
+        // Check if a proxy already exists for this target
+        Object existing = proxyCache.get(target);
+        if (existing != null) {
+            return (T) existing;
         }
         
         // Get all interfaces implemented by the target class
@@ -45,7 +47,7 @@ public class DynamicProxy {
             new EnhancedInvocationHandler(target)
         );
         
-        proxyCache.put(targetClass, proxy);
+        proxyCache.put(target, proxy);
         return proxy;
     }
     
@@ -139,6 +141,10 @@ public class DynamicProxy {
                 
                 return result;
                 
+            } catch (InvocationTargetException e) {
+                // Surface the target's own exception rather than the reflective wrapper
+                metrics.recordInvocation(method, System.currentTimeMillis() - startTime, false);
+                throw e.getCause();
             } catch (Exception e) {
                 metrics.recordInvocation(method, System.currentTimeMillis() - startTime, false);
                 throw e;
@@ -253,7 +259,11 @@ public class DynamicProxy {
                 }
             }
             
-            return method.invoke(target, args);
+            try {
+                return method.invoke(target, args);
+            } catch (InvocationTargetException e) {
+                throw e.getCause();
+            }
         }
     }
     
@@ -294,6 +304,13 @@ public class DynamicProxy {
         private final Method method;
         private final Object[] arguments;
         private final Map<String, Object> attributes = new HashMap<>();
+        private Next next;
+        
+        /** Continuation to the next element of an interceptor chain. */
+        @FunctionalInterface
+        interface Next {
+            Object call() throws Throwable;
+        }
         
         public InvocationContext(Object proxy, Object target, Method method, Object[] arguments) {
             this.proxy = proxy;
@@ -315,6 +332,15 @@ public class DynamicProxy {
         public Object getAttribute(String key) {
             return attributes.get(key);
         }
+        
+        /**
+         * Proceeds to the next interceptor in the chain, or invokes the target method
+         * directly when this context is not driven by a chain.
+         */
+        public Object proceed() throws Throwable {
+            Next n = next;
+            return n != null ? n.call() : method.invoke(target, arguments);
+        }
     }
     
     // ==================== INTERCEPTOR CHAIN ====================
@@ -324,7 +350,6 @@ public class DynamicProxy {
      */
     private static class InterceptorChain implements MethodInterceptor {
         private final List<MethodInterceptor> interceptors = new ArrayList<>();
-        private int currentIndex = 0;
         
         public void addLast(MethodInterceptor interceptor) {
             interceptors.add(interceptor);
@@ -336,13 +361,14 @@ public class DynamicProxy {
         
         @Override
         public Object intercept(InvocationContext context) throws Throwable {
-            if (currentIndex < interceptors.size()) {
-                MethodInterceptor interceptor = interceptors.get(currentIndex++);
-                try {
-                    return interceptor.intercept(context);
-                } finally {
-                    currentIndex--; // Reset for next invocation
-                }
+            return invokeAt(0, context);
+        }
+        
+        // The position is per invocation (not shared chain state) so concurrent calls cannot interfere
+        private Object invokeAt(int index, InvocationContext context) throws Throwable {
+            if (index < interceptors.size()) {
+                context.next = () -> invokeAt(index + 1, context);
+                return interceptors.get(index).intercept(context);
             }
             return null; // Should not reach here
         }
@@ -376,7 +402,7 @@ public class DynamicProxy {
             }
             
             // Proceed with method execution
-            Object result = context.getMethod().invoke(context.getTarget(), context.getArguments());
+            Object result = context.proceed();
             
             // Store in cache
             putInCache(cacheKey, result);
@@ -418,7 +444,7 @@ public class DynamicProxy {
             validateParameters(context);
             
             // Proceed with method execution
-            return context.getMethod().invoke(context.getTarget(), context.getArguments());
+            return context.proceed();
         }
         
         private void validateParameters(InvocationContext context) throws ValidationException {
@@ -479,7 +505,7 @@ public class DynamicProxy {
                 recordAuditEntry(context, "BEFORE");
                 
                 // Proceed with method execution
-                Object result = context.getMethod().invoke(context.getTarget(), context.getArguments());
+                Object result = context.proceed();
                 
                 // Record successful completion
                 recordAuditEntry(context, "AFTER", result, System.currentTimeMillis() - startTime);
@@ -526,14 +552,14 @@ public class DynamicProxy {
             }
             
             // Default to synchronous execution
-            return context.getMethod().invoke(context.getTarget(), context.getArguments());
+            return context.proceed();
         }
         
         private void executeAsync(InvocationContext context) {
             Thread.startVirtualThread(() -> {
                 try {
-                    context.getMethod().invoke(context.getTarget(), context.getArguments());
-                } catch (Exception e) {
+                    context.proceed();
+                } catch (Throwable e) {
                     // Handle async execution errors
                     System.err.println("Async execution error: " + e.getMessage());
                 }
@@ -543,8 +569,8 @@ public class DynamicProxy {
         private java.util.concurrent.Future<Object> executeAsyncWithFuture(InvocationContext context) {
             return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                 try {
-                    return context.getMethod().invoke(context.getTarget(), context.getArguments());
-                } catch (Exception e) {
+                    return context.proceed();
+                } catch (Throwable e) {
                     throw new RuntimeException(e);
                 }
             });

@@ -5,6 +5,7 @@ import annotations.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -13,7 +14,7 @@ import java.util.stream.Collectors;
  */
 public class ModelInspector {
     
-    private static final Map<Class<?>, ClassInfo> classInfoCache = new HashMap<>();
+    private static final Map<Class<?>, ClassInfo> classInfoCache = new ConcurrentHashMap<>();
     
     // ==================== CLASS INSPECTION ====================
     
@@ -270,16 +271,70 @@ public class ModelInspector {
      */
     public static Object invokeMethod(Object instance, String methodName, Object... args) {
         try {
-            Class<?>[] argTypes = Arrays.stream(args)
-                    .map(Object::getClass)
-                    .toArray(Class<?>[]::new);
-            
-            Method method = instance.getClass().getDeclaredMethod(methodName, argTypes);
+            Object[] actualArgs = args != null ? args : new Object[0];
+            Method method = findMethod(instance.getClass(), methodName, actualArgs);
+            if (method == null) {
+                throw new NoSuchMethodException(instance.getClass().getName() + "." + methodName);
+            }
             method.setAccessible(true);
-            return method.invoke(instance, args);
+            return method.invoke(instance, actualArgs);
         } catch (Exception e) {
             throw new RuntimeException("Error invoking method: " + methodName, e);
         }
+    }
+    
+    /**
+     * Finds a method in the class hierarchy whose parameters accept the given arguments
+     * (primitive parameters accept their boxed wrappers; null matches any reference type).
+     */
+    private static Method findMethod(Class<?> clazz, String methodName, Object[] args) {
+        // Prefer an exact match on the runtime argument types (most specific overload)
+        if (Arrays.stream(args).allMatch(Objects::nonNull)) {
+            Class<?>[] argTypes = Arrays.stream(args).map(Object::getClass).toArray(Class<?>[]::new);
+            try {
+                return clazz.getDeclaredMethod(methodName, argTypes);
+            } catch (NoSuchMethodException e) {
+                // fall through to compatible-signature search
+            }
+        }
+        for (Class<?> current = clazz; current != null; current = current.getSuperclass()) {
+            for (Method candidate : current.getDeclaredMethods()) {
+                if (candidate.getName().equals(methodName) && acceptsArguments(candidate.getParameterTypes(), args)) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+    
+    private static boolean acceptsArguments(Class<?>[] parameterTypes, Object[] args) {
+        if (parameterTypes.length != args.length) {
+            return false;
+        }
+        for (int i = 0; i < args.length; i++) {
+            Class<?> type = parameterTypes[i];
+            if (args[i] == null) {
+                if (type.isPrimitive()) {
+                    return false;
+                }
+            } else if (!wrap(type).isInstance(args[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    private static Class<?> wrap(Class<?> type) {
+        if (!type.isPrimitive()) return type;
+        if (type == int.class) return Integer.class;
+        if (type == long.class) return Long.class;
+        if (type == double.class) return Double.class;
+        if (type == float.class) return Float.class;
+        if (type == boolean.class) return Boolean.class;
+        if (type == char.class) return Character.class;
+        if (type == short.class) return Short.class;
+        if (type == byte.class) return Byte.class;
+        return Void.class;
     }
     
     /**

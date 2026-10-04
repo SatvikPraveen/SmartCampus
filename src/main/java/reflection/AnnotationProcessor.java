@@ -204,7 +204,7 @@ public class AnnotationProcessor {
             .level(annotation.level())
             .includeParameters(annotation.includeParameters())
             .includeReturnValue(annotation.includeReturnValue())
-            .parameters(annotation.includeParameters() ? Arrays.asList(args) : null)
+            .parameters(annotation.includeParameters() && args != null ? Arrays.asList(args) : null)
             .category(annotation.category())
             .tags(Arrays.asList(annotation.tags()))
             .async(annotation.async())
