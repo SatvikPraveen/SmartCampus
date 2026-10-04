@@ -19,8 +19,17 @@ jobs:
           cache: maven
       - name: Build
         run: ./mvnw -B -ntp verify
+      - name: Extract release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:
           files: target/smartcampus.jar
-          generate_release_notes: true
+          body_path: release-notes.md
