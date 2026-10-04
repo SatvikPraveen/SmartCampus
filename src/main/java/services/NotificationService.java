@@ -103,6 +103,8 @@ public class NotificationService implements EventListener<Object> {
     private final ExecutorService notificationExecutor;
     private final ScheduledExecutorService scheduledExecutor;
     private final CompletableFuture<Void> processingTask;
+    private volatile boolean processingActive = true;
+    private final java.util.concurrent.atomic.AtomicLong notificationSequence = new java.util.concurrent.atomic.AtomicLong();
     
     // Configuration
     private final int maxNotificationsPerUser = 1000;
@@ -170,7 +172,7 @@ public class NotificationService implements EventListener<Object> {
         
         // Store notification
         notifications.put(notification.getId(), notification);
-        userNotifications.computeIfAbsent(userId, k -> new ArrayList<>()).add(notification.getId());
+        userNotifications.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(notification.getId());
         
         // Add to processing queue
         pendingNotifications.offer(notification);
@@ -579,6 +581,9 @@ public class NotificationService implements EventListener<Object> {
      */
     public void shutdown() {
         try {
+            // Stop the processing loop first; otherwise it keeps the executor busy and
+            // awaitTermination below always waits the full timeout.
+            processingActive = false;
             notificationExecutor.shutdown();
             scheduledExecutor.shutdown();
             
@@ -607,7 +612,7 @@ public class NotificationService implements EventListener<Object> {
     }
     
     private String generateNotificationId() {
-        return "NOTIF_" + System.currentTimeMillis() + "_" + System.nanoTime() % 10000;
+        return "NOTIF_" + System.currentTimeMillis() + "_" + notificationSequence.incrementAndGet();
     }
     
     private String processTemplate(String template, Map<String, String> parameters) {
@@ -681,7 +686,7 @@ public class NotificationService implements EventListener<Object> {
     
     private CompletableFuture<Void> startNotificationProcessing() {
         return CompletableFuture.runAsync(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
+            while (processingActive && !Thread.currentThread().isInterrupted()) {
                 try {
                     Notification notification = pendingNotifications.poll();
                     if (notification != null) {
