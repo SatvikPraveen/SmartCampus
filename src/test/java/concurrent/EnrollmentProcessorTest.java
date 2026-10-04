@@ -209,15 +209,43 @@ class EnrollmentProcessorTest {
         }
 
         @Test
-        void slowEnrollmentTimesOut() throws Exception {
+        void timedOutEnrollmentIsCancelledAndNeverCommittedLater() throws Exception {
+            // A first enrollment holds the processor's lock inside enrollStudent ...
+            enrollmentService.entered = new CountDownLatch(1);
+            enrollmentService.release = new CountDownLatch(1);
+            Course c = course(5);
+            CompletableFuture<EnrollmentResult> first = processor.processEnrollmentAsync(student(1), c);
+            assertThat(enrollmentService.entered.await(10, TimeUnit.SECONDS)).isTrue();
+
+            // ... so the second one is still waiting for it when its timeout fires.
+            CompletableFuture<EnrollmentResult> second = processor.processEnrollmentWithTimeout(
+                    student(2), c, 20, TimeUnit.MILLISECONDS);
+            EnrollmentResult result = await(second);
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getMessage()).isEqualTo("Enrollment timed out");
+
+            enrollmentService.release.countDown();
+            assertThat(await(first).isSuccess()).isTrue();
+            processor.waitForCompletion(10, TimeUnit.SECONDS);
+
+            assertThat(enrollmentService.isStudentEnrolled("S2", "C1")).isFalse();
+            assertThat(enrollmentService.attempts.get()).isEqualTo(1);
+        }
+
+        @Test
+        void timeoutDuringCommitReportsTheRealOutcome() throws Exception {
             enrollmentService.entered = new CountDownLatch(1);
             enrollmentService.release = new CountDownLatch(1);
 
-            EnrollmentResult result = await(processor.processEnrollmentWithTimeout(
-                    student(1), course(5), 20, TimeUnit.MILLISECONDS));
+            CompletableFuture<EnrollmentResult> pending = processor.processEnrollmentWithTimeout(
+                    student(1), course(5), 20, TimeUnit.MILLISECONDS);
+            assertThat(enrollmentService.entered.await(10, TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(50); // let the timeout fire while the commit is in progress
+            enrollmentService.release.countDown();
 
-            assertThat(result.isSuccess()).isFalse();
-            assertThat(result.getMessage()).isEqualTo("Enrollment timed out");
+            EnrollmentResult result = await(pending);
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(enrollmentService.isStudentEnrolled("S1", "C1")).isTrue();
         }
 
         @Test
@@ -309,6 +337,20 @@ class EnrollmentProcessorTest {
         assertThat(request.getCourse()).isSameAs(c);
         assertThat(request.getPriority()).isEqualTo(EnrollmentPriority.LOW);
         assertThat(request.getRequestTime()).isNotNull();
+    }
+
+    @Test
+    void shutdownProcessesRequestsStillWaitingInTheQueue() {
+        Course c = course(25); // within EnrollmentService's default per-course limit of 30
+        for (int i = 0; i < 25; i++) {
+            processor.queueEnrollmentRequest(student(i), c, EnrollmentPriority.NORMAL);
+        }
+
+        processor.shutdown();
+
+        assertThat(enrollmentService.getCurrentEnrollmentCount("C1")).isEqualTo(25);
+        assertThatThrownBy(() -> processor.queueEnrollmentRequest(student(99), c, EnrollmentPriority.NORMAL))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test

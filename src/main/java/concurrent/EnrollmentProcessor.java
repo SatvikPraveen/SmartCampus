@@ -7,6 +7,7 @@ import services.EnrollmentService;
 import services.NotificationService;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -25,6 +26,7 @@ public class EnrollmentProcessor {
     private final AtomicInteger activeProcesses;
     private final BlockingQueue<EnrollmentRequest> enrollmentQueue;
     private volatile boolean isProcessing;
+    private Thread queueProcessor;
     private volatile long retryBackoffMillis = 1000;
     
     public EnrollmentProcessor(EnrollmentService enrollmentService, 
@@ -47,11 +49,16 @@ public class EnrollmentProcessor {
      */
     public CompletableFuture<EnrollmentResult> processEnrollmentAsync(
             Student student, Course course) {
+        return processEnrollmentAsync(student, course, null);
+    }
+    
+    private CompletableFuture<EnrollmentResult> processEnrollmentAsync(
+            Student student, Course course, AtomicBoolean commitClaim) {
         
         return CompletableFuture.supplyAsync(() -> {
             activeProcesses.incrementAndGet();
             try {
-                return processEnrollment(student, course);
+                return processEnrollment(student, course, commitClaim);
             } finally {
                 activeProcesses.decrementAndGet();
             }
@@ -80,6 +87,9 @@ public class EnrollmentProcessor {
      */
     public void queueEnrollmentRequest(Student student, Course course, 
                                      EnrollmentPriority priority) {
+        if (!isProcessing) {
+            throw new IllegalStateException("EnrollmentProcessor has been shut down");
+        }
         EnrollmentRequest request = new EnrollmentRequest(student, course, priority);
         try {
             enrollmentQueue.put(request);
@@ -90,9 +100,13 @@ public class EnrollmentProcessor {
     }
     
     /**
-     * Process enrollment with thread safety
+     * Process enrollment with thread safety.
+     *
+     * @param commitClaim when non-null, the enrollment is only committed if this flag can be
+     *                    claimed first; a caller that has already claimed it (for example after
+     *                    reporting a timeout) thereby cancels the enrollment
      */
-    private EnrollmentResult processEnrollment(Student student, Course course) {
+    private EnrollmentResult processEnrollment(Student student, Course course, AtomicBoolean commitClaim) {
         enrollmentLock.lock();
         try {
             // Check course capacity
@@ -104,6 +118,11 @@ public class EnrollmentProcessor {
             // Check if student is already enrolled
             if (isStudentEnrolled(student, course)) {
                 return new EnrollmentResult(false, "Student already enrolled", 
+                                          student, course, new Date());
+            }
+            
+            if (commitClaim != null && !commitClaim.compareAndSet(false, true)) {
+                return new EnrollmentResult(false, "Enrollment cancelled after timeout",
                                           student, course, new Date());
             }
             
@@ -140,7 +159,7 @@ public class EnrollmentProcessor {
     private void startQueueProcessor() {
         isProcessing = true;
         
-        Thread queueProcessor = new Thread(() -> {
+        Thread processor = new Thread(() -> {
             while (isProcessing || !enrollmentQueue.isEmpty()) {
                 try {
                     EnrollmentRequest request = enrollmentQueue.poll(1, TimeUnit.SECONDS);
@@ -160,29 +179,43 @@ public class EnrollmentProcessor {
             }
         });
         
-        queueProcessor.setDaemon(true);
-        queueProcessor.setName("EnrollmentQueueProcessor");
-        queueProcessor.start();
+        processor.setDaemon(true);
+        processor.setName("EnrollmentQueueProcessor");
+        processor.start();
+        queueProcessor = processor;
     }
     
     /**
-     * Process enrollment requests with timeout
+     * Process enrollment requests with timeout.
+     *
+     * <p>A reported timeout is final: the enrollment is cancelled and will not be committed
+     * later. If the enrollment had already started committing when the timeout fired, the
+     * real outcome is returned instead of a timeout.</p>
      */
     public CompletableFuture<EnrollmentResult> processEnrollmentWithTimeout(
             Student student, Course course, long timeout, TimeUnit unit) {
         
-        CompletableFuture<EnrollmentResult> future = processEnrollmentAsync(student, course);
+        AtomicBoolean commitClaim = new AtomicBoolean(false);
+        CompletableFuture<EnrollmentResult> work = processEnrollmentAsync(student, course, commitClaim);
         
-        return future.orTimeout(timeout, unit)
-                .exceptionally(throwable -> {
-                    if (throwable instanceof TimeoutException) {
-                        return new EnrollmentResult(false, "Enrollment timed out", 
-                                                  student, course, new Date());
+        return work.copy().orTimeout(timeout, unit)
+                .handle((result, throwable) -> {
+                    if (throwable == null) {
+                        return CompletableFuture.completedFuture(result);
                     }
-                    return new EnrollmentResult(false, "Enrollment error: " + 
-                                              throwable.getMessage(), 
-                                              student, course, new Date());
-                });
+                    Throwable cause = throwable instanceof CompletionException && throwable.getCause() != null
+                            ? throwable.getCause() : throwable;
+                    if (cause instanceof TimeoutException) {
+                        if (commitClaim.compareAndSet(false, true)) {
+                            return CompletableFuture.completedFuture(new EnrollmentResult(
+                                    false, "Enrollment timed out", student, course, new Date()));
+                        }
+                        return work; // already committing: report the real outcome
+                    }
+                    return CompletableFuture.completedFuture(new EnrollmentResult(false,
+                            "Enrollment error: " + cause.getMessage(), student, course, new Date()));
+                })
+                .thenCompose(f -> f);
     }
     
     /**
@@ -196,7 +229,7 @@ public class EnrollmentProcessor {
             int attempts = 0;
             
             while (attempts <= maxRetries) {
-                result = processEnrollment(student, course);
+                result = processEnrollment(student, course, null);
                 if (result.isSuccess()) {
                     break;
                 }
@@ -231,7 +264,7 @@ public class EnrollmentProcessor {
             Student student, Course course, long delay, TimeUnit unit) {
         
         return scheduledExecutor.schedule(() -> 
-            processEnrollment(student, course), delay, unit);
+            processEnrollment(student, course, null), delay, unit);
     }
     
     /**
@@ -262,6 +295,18 @@ public class EnrollmentProcessor {
      */
     public void shutdown() {
         isProcessing = false;
+        
+        // Hand anything still queued to the executor before it stops accepting work, then stop
+        // the processor thread (it may be waiting in poll) and wait for its last hand-off.
+        List<EnrollmentRequest> pending = new ArrayList<>();
+        enrollmentQueue.drainTo(pending);
+        pending.forEach(r -> processEnrollmentAsync(r.getStudent(), r.getCourse()));
+        queueProcessor.interrupt();
+        try {
+            queueProcessor.join(TimeUnit.SECONDS.toMillis(5));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         
         executorService.shutdown();
         scheduledExecutor.shutdown();
