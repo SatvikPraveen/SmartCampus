@@ -558,7 +558,7 @@ public class CourseBuilder {
         Calendar cal = Calendar.getInstance();
         int month = cal.get(Calendar.MONTH);
         
-        if (month >= Calendar.AUGUST || month <= Calendar.DECEMBER) {
+        if (month >= Calendar.AUGUST && month <= Calendar.DECEMBER) {
             return "Fall";
         } else if (month >= Calendar.JANUARY && month <= Calendar.MAY) {
             return "Spring";
