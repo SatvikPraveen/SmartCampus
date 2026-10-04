@@ -69,10 +69,17 @@ public class RoleBasedAccess {
         Set<UserRole> belowSuperAdmin = EnumSet.copyOf(belowAdmin);
         belowSuperAdmin.addAll(ADMIN_TIER);
         
-        SUPER_ADMIN_TIER.forEach(role -> roleHierarchy.put(role, belowSuperAdmin));
-        ADMIN_TIER.forEach(role -> roleHierarchy.put(role, belowAdmin));
-        PROFESSOR_TIER.forEach(role -> roleHierarchy.put(role, STUDENT_TIER));
-        STUDENT_TIER.forEach(role -> roleHierarchy.put(role, Set.of())); // No inherited roles
+        // Each role gets its own mutable set so addRoleHierarchy/removeRoleHierarchy affect only that role
+        SUPER_ADMIN_TIER.forEach(role -> roleHierarchy.put(role, subordinateSet(belowSuperAdmin)));
+        ADMIN_TIER.forEach(role -> roleHierarchy.put(role, subordinateSet(belowAdmin)));
+        PROFESSOR_TIER.forEach(role -> roleHierarchy.put(role, subordinateSet(STUDENT_TIER)));
+        STUDENT_TIER.forEach(role -> roleHierarchy.put(role, subordinateSet(Set.of()))); // No inherited roles
+    }
+
+    private static Set<UserRole> subordinateSet(Set<UserRole> roles) {
+        Set<UserRole> set = ConcurrentHashMap.newKeySet();
+        set.addAll(roles);
+        return set;
     }
     
     // ==================== PERMISSION INITIALIZATION ====================

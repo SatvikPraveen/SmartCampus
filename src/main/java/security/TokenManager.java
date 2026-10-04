@@ -4,6 +4,7 @@ package security;
 import models.User;
 import enums.UserRole;
 import cache.CacheManager;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -25,6 +26,7 @@ public class TokenManager {
     private final Map<String, TokenInfo> activeTokens;
     private final Map<String, Set<String>> sessionTokens;
     private final SecureRandom secureRandom;
+    private final Clock clock;
     
     // Token configuration
     private final long accessTokenExpiryMinutes = 60;      // 1 hour
@@ -34,11 +36,19 @@ public class TokenManager {
     private final String algorithm = "HS256";
     
     public TokenManager() {
+        this(Clock.systemDefaultZone());
+    }
+    
+    /**
+     * Creates a token manager that reads the current time from the given clock
+     */
+    TokenManager(Clock clock) {
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.secureRandom = new SecureRandom(); // must exist before the secret key is generated
         this.secretKey = generateSecretKey();
         this.cacheManager = CacheManager.getInstance();
         this.activeTokens = new ConcurrentHashMap<>();
         this.sessionTokens = new ConcurrentHashMap<>();
-        this.secureRandom = new SecureRandom();
         
         // Initialize token cache
         if (!cacheManager.cacheExists("tokens")) {
@@ -59,7 +69,7 @@ public class TokenManager {
      * Generates token with specific type
      */
     public String generateToken(User user, String sessionId, TokenType tokenType) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = now();
         LocalDateTime expiresAt = calculateExpiryTime(now, tokenType);
         
         String tokenId = generateTokenId();
@@ -124,6 +134,11 @@ public class TokenManager {
                 return null;
             }
             
+            // Verify signature before trusting (or acting on) anything in the payload
+            if (!verifyTokenSignature(token, payload)) {
+                return null;
+            }
+            
             // Check if token exists and is not revoked
             TokenInfo tokenInfo = getTokenInfo(payload.getTokenId());
             if (tokenInfo == null || tokenInfo.isRevoked()) {
@@ -131,19 +146,14 @@ public class TokenManager {
             }
             
             // Check expiration
-            if (payload.isExpired()) {
+            if (tokenInfo.isExpired(now())) {
                 // Mark as expired and remove
                 revokeToken(payload.getTokenId());
                 return null;
             }
             
-            // Verify signature
-            if (!verifyTokenSignature(token, payload)) {
-                return null;
-            }
-            
             // Update last used timestamp
-            tokenInfo.updateLastUsed();
+            tokenInfo.updateLastUsed(now());
             
             return tokenInfo;
             
@@ -273,7 +283,7 @@ public class TokenManager {
         List<String> expiredTokens = new ArrayList<>();
         
         for (Map.Entry<String, TokenInfo> entry : activeTokens.entrySet()) {
-            if (entry.getValue().isExpired()) {
+            if (entry.getValue().isExpired(now())) {
                 expiredTokens.add(entry.getKey());
             }
         }
@@ -313,7 +323,7 @@ public class TokenManager {
     public List<TokenInfo> getUserTokens(String username) {
         return activeTokens.values().stream()
                           .filter(token -> username.equals(token.getUsername()))
-                          .filter(token -> !token.isExpired() && !token.isRevoked())
+                          .filter(token -> !token.isExpired(now()) && !token.isRevoked())
                           .collect(java.util.stream.Collectors.toList());
     }
     
@@ -332,7 +342,7 @@ public class TokenManager {
         for (TokenInfo token : activeTokens.values()) {
             if (token.isRevoked()) {
                 revokedCount++;
-            } else if (token.isExpired()) {
+            } else if (token.isExpired(now())) {
                 expiredCount++;
             } else {
                 activeCount++;
@@ -421,12 +431,12 @@ public class TokenManager {
             "\"iss\":\"%s\",\"iat\":%d,\"exp\":%d,\"type\":\"%s\"}",
             payload.getTokenId(),
             payload.getUsername(),
-            payload.getUserRole(),
+            payload.getUserRole().name(), // name(), not toString(): parsed back with UserRole.valueOf
             payload.getSessionId(),
             payload.getIssuer(),
             payload.getIssuedAt().toEpochSecond(ZoneOffset.UTC),
             payload.getExpiresAt().toEpochSecond(ZoneOffset.UTC),
-            payload.getTokenType()
+            payload.getTokenType().name()
         );
     }
     
@@ -499,7 +509,11 @@ public class TokenManager {
             ChronoUnit.MILLIS.between(tokenInfo.getIssuedAt(), tokenInfo.getExpiresAt()) / 2,
             ChronoUnit.MILLIS
         );
-        return LocalDateTime.now().isAfter(halfLife);
+        return now().isAfter(halfLife);
+    }
+    
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock);
     }
     
     private User getUserByUsername(String username) {
@@ -583,11 +597,19 @@ public class TokenManager {
         }
         
         public boolean isExpired() {
-            return LocalDateTime.now().isAfter(expiresAt);
+            return isExpired(LocalDateTime.now());
+        }
+        
+        public boolean isExpired(LocalDateTime now) {
+            return now.isAfter(expiresAt);
         }
         
         public void updateLastUsed() {
-            this.lastUsed = LocalDateTime.now();
+            updateLastUsed(LocalDateTime.now());
+        }
+        
+        public void updateLastUsed(LocalDateTime now) {
+            this.lastUsed = now;
         }
         
         public void revoke() {

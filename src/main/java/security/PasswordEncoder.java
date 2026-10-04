@@ -118,8 +118,10 @@ public class PasswordEncoder {
             byte[] salt = Base64.getDecoder().decode(parts[2]);
             byte[] storedHash = Base64.getDecoder().decode(parts[3]);
             
-            // Hash the provided password with the stored salt and parameters
-            byte[] computedHash = hashPassword(rawPassword, salt, storedAlgorithm, storedIterations);
+            // Hash the provided password with the stored salt and parameters; the stored hash
+            // length determines the derived key length, which is not part of the encoded format
+            byte[] computedHash = hashPassword(rawPassword, salt, storedAlgorithm, storedIterations,
+                                               storedHash.length * 8);
             
             // Compare hashes using constant-time comparison
             return constantTimeEquals(storedHash, computedHash);
@@ -306,10 +308,10 @@ public class PasswordEncoder {
     // ==================== PRIVATE METHODS ====================
     
     private byte[] hashPassword(String password, byte[] salt) {
-        return hashPassword(password, salt, algorithm, iterations);
+        return hashPassword(password, salt, algorithm, iterations, keyLength);
     }
     
-    private byte[] hashPassword(String password, byte[] salt, String algorithm, int iterations) {
+    private byte[] hashPassword(String password, byte[] salt, String algorithm, int iterations, int keyLength) {
         try {
             KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, iterations, keyLength);
             SecretKeyFactory factory = SecretKeyFactory.getInstance(algorithm);

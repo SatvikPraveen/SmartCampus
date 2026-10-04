@@ -61,11 +61,13 @@ public class SecurityManager {
     }
     
     private void initializeCaches() {
-        // Initialize security-related caches
-        cacheManager.createCache("sessions");
-        cacheManager.createCache("tokens");
-        cacheManager.createCache("permissions");
-        cacheManager.createCache("blocked_ips");
+        // Initialize security-related caches (shared CacheManager; TokenManager may already
+        // have created "tokens", and createCache rejects duplicates)
+        for (String cacheName : List.of("sessions", "tokens", "permissions", "blocked_ips")) {
+            if (!cacheManager.cacheExists(cacheName)) {
+                cacheManager.createCache(cacheName);
+            }
+        }
     }
     
     // ==================== AUTHENTICATION ====================
@@ -94,7 +96,7 @@ public class SecurityManager {
             User user = validateCredentials(username, password);
             
             if (user == null) {
-                recordFailedAttempt(username, ipAddress);
+                // recorded once by the catch block below
                 throw AuthenticationException.invalidCredentials(username, ipAddress);
             }
             
