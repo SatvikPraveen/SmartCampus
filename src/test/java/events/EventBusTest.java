@@ -684,6 +684,39 @@ class EventBusTest {
     class Statistics {
 
         @Test
+        void eventWithSeveralFailingHandlersCountsAsOneFailure() {
+            EventBus bus = syncBus();
+            bus.subscribe("A", failing());
+            bus.subscribe("A", failing());
+            bus.subscribe("A", failing());
+            bus.subscribe("B", e -> { });
+
+            bus.publishSync(event("A"));
+            bus.publishSync(event("B"));
+
+            EventBusStats stats = bus.getStats();
+            assertThat(stats.getEventsFailed()).isEqualTo(1);
+            assertThat(stats.getEventsSucceeded()).isEqualTo(1);
+            assertThat(stats.getFailureRate()).isCloseTo(50.0, within(1e-9));
+            assertThat(stats.getSuccessRate()).isCloseTo(50.0, within(1e-9));
+        }
+
+        @Test
+        void ratesNeverExceedOneHundredPercent() {
+            EventBus bus = syncBus();
+            for (int i = 0; i < 5; i++) {
+                bus.subscribe("A", failing());
+            }
+
+            bus.publishSync(event("A"));
+
+            EventBusStats stats = bus.getStats();
+            assertThat(stats.getFailureRate()).isEqualTo(100.0);
+            assertThat(stats.getSuccessRate()).isZero();
+            assertThat(stats.getFailureRate() + stats.getSuccessRate()).isLessThanOrEqualTo(100.0);
+        }
+
+        @Test
         void statsTrackPublishedProcessedFailedAndPerType() {
             EventBus bus = syncBus();
             String good = bus.subscribe("A", e -> { });

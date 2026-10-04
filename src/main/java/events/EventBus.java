@@ -4,6 +4,7 @@ package events;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -37,6 +38,7 @@ public class EventBus {
     private final AtomicLong eventsPublished;
     private final AtomicLong eventsProcessed;
     private final AtomicLong eventsFailed;
+    private final AtomicLong eventsSucceeded;
     private final AtomicLong eventsInFlight = new AtomicLong(0);
     private final Map<String, AtomicLong> eventTypeStats;
     private final Map<String, AtomicLong> handlerStats;
@@ -156,6 +158,7 @@ public class EventBus {
         private final long eventsPublished;
         private final long eventsProcessed;
         private final long eventsFailed;
+        private final long eventsSucceeded;
         private final int registeredHandlers;
         private final int deadLetterCount;
         private final Map<String, Long> eventTypeStats;
@@ -166,11 +169,25 @@ public class EventBus {
                            long eventsFailed, int registeredHandlers, int deadLetterCount,
                            Map<String, Long> eventTypeStats, Map<String, Long> handlerStats,
                            boolean isRunning) {
+            this(busName, eventsPublished, eventsProcessed, eventsFailed,
+                 Math.max(0, eventsProcessed - eventsFailed), registeredHandlers, deadLetterCount,
+                 eventTypeStats, handlerStats, isRunning);
+        }
+
+        /**
+         * @param eventsFailed    events that failed at least once (each event counted once)
+         * @param eventsSucceeded events whose handlers all completed without error
+         */
+        public EventBusStats(String busName, long eventsPublished, long eventsProcessed,
+                           long eventsFailed, long eventsSucceeded, int registeredHandlers,
+                           int deadLetterCount, Map<String, Long> eventTypeStats,
+                           Map<String, Long> handlerStats, boolean isRunning) {
             this.busName = busName;
             this.snapshotTime = LocalDateTime.now();
             this.eventsPublished = eventsPublished;
             this.eventsProcessed = eventsProcessed;
             this.eventsFailed = eventsFailed;
+            this.eventsSucceeded = eventsSucceeded;
             this.registeredHandlers = registeredHandlers;
             this.deadLetterCount = deadLetterCount;
             this.eventTypeStats = new HashMap<>(eventTypeStats);
@@ -184,6 +201,7 @@ public class EventBus {
         public long getEventsPublished() { return eventsPublished; }
         public long getEventsProcessed() { return eventsProcessed; }
         public long getEventsFailed() { return eventsFailed; }
+        public long getEventsSucceeded() { return eventsSucceeded; }
         public int getRegisteredHandlers() { return registeredHandlers; }
         public int getDeadLetterCount() { return deadLetterCount; }
         public Map<String, Long> getEventTypeStats() { return new HashMap<>(eventTypeStats); }
@@ -192,12 +210,12 @@ public class EventBus {
         
         public double getSuccessRate() {
             long total = eventsPublished;
-            return total > 0 ? ((double) (eventsProcessed - eventsFailed) / total) * 100.0 : 0.0;
+            return total > 0 ? Math.min(100.0, ((double) eventsSucceeded / total) * 100.0) : 0.0;
         }
         
         public double getFailureRate() {
             long total = eventsPublished;
-            return total > 0 ? ((double) eventsFailed / total) * 100.0 : 0.0;
+            return total > 0 ? Math.min(100.0, ((double) eventsFailed / total) * 100.0) : 0.0;
         }
     }
     
@@ -234,6 +252,7 @@ public class EventBus {
         this.eventsPublished = new AtomicLong(0);
         this.eventsProcessed = new AtomicLong(0);
         this.eventsFailed = new AtomicLong(0);
+        this.eventsSucceeded = new AtomicLong(0);
         this.eventTypeStats = new ConcurrentHashMap<>();
         this.handlerStats = new ConcurrentHashMap<>();
         
@@ -514,8 +533,9 @@ public class EventBus {
         // Sort by priority (higher priority first)
         handlersToRun.sort((h1, h2) -> Integer.compare(h2.getPriority(), h1.getPriority()));
         
-        // Execute handlers
+        // Execute handlers; the event counts as failed at most once, however many handlers fail
         List<CompletableFuture<Void>> asyncTasks = new ArrayList<>();
+        AtomicBoolean eventFailed = new AtomicBoolean(false);
         
         for (EventHandler handler : handlersToRun) {
             // Apply handler-specific filter
@@ -525,28 +545,35 @@ public class EventBus {
             
             if (handler.isAsync()) {
                 CompletableFuture<Void> future = CompletableFuture.runAsync(
-                    () -> executeHandler(handler, event), executorService);
+                    () -> executeHandler(handler, event, eventFailed), executorService);
                 asyncTasks.add(future);
             } else {
-                executeHandler(handler, event);
+                executeHandler(handler, event, eventFailed);
             }
         }
         
         // Complete once all async tasks are done (without blocking the current thread)
         return CompletableFuture.allOf(asyncTasks.toArray(new CompletableFuture[0]))
-            .thenRun(eventsProcessed::incrementAndGet);
+            .thenRun(() -> {
+                eventsProcessed.incrementAndGet();
+                if (!eventFailed.get()) {
+                    eventsSucceeded.incrementAndGet();
+                }
+            });
     }
     
     /**
      * Executes a single event handler
      */
-    private void executeHandler(EventHandler handler, Event event) {
+    private void executeHandler(EventHandler handler, Event event, AtomicBoolean eventFailed) {
         try {
             handler.getHandler().accept(event);
             recordHandlerSuccess(handler);
         } catch (Exception e) {
             handler.incrementFailed();
-            eventsFailed.incrementAndGet();
+            if (eventFailed.compareAndSet(false, true)) {
+                eventsFailed.incrementAndGet();
+            }
             
             // Log error and potentially retry
             handleHandlerError(handler, event, e, 1);
@@ -654,6 +681,7 @@ public class EventBus {
             eventsPublished.get(),
             eventsProcessed.get(),
             eventsFailed.get(),
+            eventsSucceeded.get(),
             totalHandlers,
             deadLetterQueue.size(),
             eventTypeStatsSnapshot,
@@ -774,6 +802,7 @@ public class EventBus {
         eventsPublished.set(0);
         eventsProcessed.set(0);
         eventsFailed.set(0);
+        eventsSucceeded.set(0);
         eventTypeStats.clear();
         
         for (AtomicLong count : handlerStats.values()) {
