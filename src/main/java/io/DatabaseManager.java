@@ -2,6 +2,8 @@
 
 package io;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,7 +18,7 @@ import com.zaxxer.hikari.HikariDataSource;
  */
 public class DatabaseManager {
     
-    private static DatabaseManager instance;
+    private static volatile DatabaseManager instance;
     private static final ReentrantLock instanceLock = new ReentrantLock();
     
     private DataSource dataSource;
@@ -94,9 +96,47 @@ public class DatabaseManager {
     public Connection getConnection() throws SQLException {
         Connection transConn = transactionConnection.get();
         if (transConn != null && !transConn.isClosed()) {
-            return transConn;
+            // Callers close what they obtain; that must not end the surrounding transaction
+            return nonClosing(transConn);
         }
         return dataSource.getConnection();
+    }
+    
+    /**
+     * Wrap a transaction-bound connection so that close() is a no-op; it is closed by
+     * commitTransaction/rollbackTransaction instead.
+     */
+    private static Connection nonClosing(Connection conn) {
+        return (Connection) Proxy.newProxyInstance(DatabaseManager.class.getClassLoader(),
+            new Class<?>[]{Connection.class}, (proxy, method, args) -> {
+                if ("close".equals(method.getName()) && method.getParameterCount() == 0) {
+                    return null;
+                }
+                try {
+                    return method.invoke(conn, args);
+                } catch (InvocationTargetException e) {
+                    throw e.getCause();
+                }
+            });
+    }
+    
+    /**
+     * Wrap a ResultSet so that closing it also closes its statement and releases its connection.
+     */
+    private static ResultSet closingResultSet(ResultSet rs, Statement stmt, Connection conn) {
+        return (ResultSet) Proxy.newProxyInstance(DatabaseManager.class.getClassLoader(),
+            new Class<?>[]{ResultSet.class}, (proxy, method, args) -> {
+                if ("close".equals(method.getName()) && method.getParameterCount() == 0) {
+                    try (conn; stmt; rs) {
+                        return null;
+                    }
+                }
+                try {
+                    return method.invoke(rs, args);
+                } catch (InvocationTargetException e) {
+                    throw e.getCause();
+                }
+            });
     }
     
     /**
@@ -104,14 +144,22 @@ public class DatabaseManager {
      */
     public ResultSet executeQuery(String sql, Object... parameters) throws SQLException {
         Connection conn = getConnection();
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        
-        // Set parameters
-        for (int i = 0; i < parameters.length; i++) {
-            stmt.setObject(i + 1, parameters[i]);
+        PreparedStatement stmt = null;
+        try {
+            stmt = conn.prepareStatement(sql);
+            
+            // Set parameters
+            for (int i = 0; i < parameters.length; i++) {
+                stmt.setObject(i + 1, parameters[i]);
+            }
+            
+            // Closing the returned ResultSet releases the statement and connection
+            return closingResultSet(stmt.executeQuery(), stmt, conn);
+        } catch (SQLException e) {
+            try (Connection c = conn; Statement st = stmt) {
+                throw e;
+            }
         }
-        
-        return stmt.executeQuery();
     }
     
     /**
@@ -438,7 +486,11 @@ public class DatabaseManager {
      */
     public void backupDatabase(String backupFilePath) throws SQLException {
         String backupSql = "SCRIPT TO '" + backupFilePath + "'";
-        executeUpdate(backupSql);
+        // SCRIPT returns a result set, which executeUpdate rejects; use execute()
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute(backupSql);
+        }
     }
     
     /**
