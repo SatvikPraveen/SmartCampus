@@ -125,6 +125,91 @@ public class DatabaseManager {
             for (int i = 0; i < parameters.length; i++) {
                 stmt.setObject(i + 1, parameters[i]);
             }
+
+            return stmt.executeUpdate();
+        }
+    }
+
+    
+    /**
+     * Execute insert and return generated key
+     */
+    public long executeInsert(String sql, Object... parameters) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            
+            // Set parameters
+            for (int i = 0; i < parameters.length; i++) {
+                stmt.setObject(i + 1, parameters[i]);
+            }
+            
+            int affectedRows = stmt.executeUpdate();
+            if (affectedRows == 0) {
+                throw new SQLException("Insert failed, no rows affected.");
+            }
+            
+            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    return generatedKeys.getLong(1);
+                } else {
+                    throw new SQLException("Insert failed, no ID obtained.");
+                }
+            }
+        }
+    }
+    
+    /**
+     * Execute batch operations
+     */
+    public int[] executeBatch(String sql, List<Object[]> parametersList) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            for (Object[] parameters : parametersList) {
+                for (int i = 0; i < parameters.length; i++) {
+                    stmt.setObject(i + 1, parameters[i]);
+                }
+                stmt.addBatch();
+            }
+            
+            return stmt.executeBatch();
+        }
+    }
+    
+    /**
+     * Execute query and return single result
+     */
+    public <T> Optional<T> queryForObject(String sql, RowMapper<T> rowMapper, Object... parameters) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            // Set parameters
+            for (int i = 0; i < parameters.length; i++) {
+                stmt.setObject(i + 1, parameters[i]);
+            }
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(rowMapper.mapRow(rs));
+                }
+                return Optional.empty();
+            }
+        }
+    }
+    
+    /**
+     * Execute query and return list of results
+     */
+    public <T> List<T> queryForList(String sql, RowMapper<T> rowMapper, Object... parameters) throws SQLException {
+        List<T> results = new ArrayList<>();
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            // Set parameters
+            for (int i = 0; i < parameters.length; i++) {
+                stmt.setObject(i + 1, parameters[i]);
+            }
             
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
@@ -557,88 +642,4 @@ public class DatabaseManager {
                                totalConnections, activeConnections, idleConnections, threadsAwaitingConnection);
         }
     }
-}i + 1, parameters[i]);
-            }
-            
-            return stmt.executeUpdate();
-        }
-    }
-    
-    /**
-     * Execute insert and return generated key
-     */
-    public long executeInsert(String sql, Object... parameters) throws SQLException {
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            
-            // Set parameters
-            for (int i = 0; i < parameters.length; i++) {
-                stmt.setObject(i + 1, parameters[i]);
-            }
-            
-            int affectedRows = stmt.executeUpdate();
-            if (affectedRows == 0) {
-                throw new SQLException("Insert failed, no rows affected.");
-            }
-            
-            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    return generatedKeys.getLong(1);
-                } else {
-                    throw new SQLException("Insert failed, no ID obtained.");
-                }
-            }
-        }
-    }
-    
-    /**
-     * Execute batch operations
-     */
-    public int[] executeBatch(String sql, List<Object[]> parametersList) throws SQLException {
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            for (Object[] parameters : parametersList) {
-                for (int i = 0; i < parameters.length; i++) {
-                    stmt.setObject(i + 1, parameters[i]);
-                }
-                stmt.addBatch();
-            }
-            
-            return stmt.executeBatch();
-        }
-    }
-    
-    /**
-     * Execute query and return single result
-     */
-    public <T> Optional<T> queryForObject(String sql, RowMapper<T> rowMapper, Object... parameters) throws SQLException {
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            // Set parameters
-            for (int i = 0; i < parameters.length; i++) {
-                stmt.setObject(i + 1, parameters[i]);
-            }
-            
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return Optional.of(rowMapper.mapRow(rs));
-                }
-                return Optional.empty();
-            }
-        }
-    }
-    
-    /**
-     * Execute query and return list of results
-     */
-    public <T> List<T> queryForList(String sql, RowMapper<T> rowMapper, Object... parameters) throws SQLException {
-        List<T> results = new ArrayList<>();
-        
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            // Set parameters
-            for (int i = 0; i < parameters.length; i++) {
-                stmt.setObject(
+}
