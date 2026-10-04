@@ -22,7 +22,7 @@ class CostModelTest {
     @Test
     void emptyTimetableCountsOnlyUnassigned() {
         CostBreakdown c = CostModel.evaluate(Fixtures.tiny(), new int[] {U, U, U, U}, new int[] {U, U, U, U});
-        assertEquals(new CostBreakdown(4, 0, 0, 0, 0, 0, 0, 0), c);
+        assertEquals(new CostBreakdown(4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), c);
     }
 
     @Test
@@ -71,8 +71,8 @@ class CostModelTest {
 
     @Test
     void weightedObjectiveIsLexicographicForLargeWeight() {
-        CostBreakdown a = new CostBreakdown(0, 1, 0, 0, 0, 0, 0, 0);
-        CostBreakdown b = new CostBreakdown(0, 0, 0, 0, 0, 900, 0, 0);
+        CostBreakdown a = new CostBreakdown(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        CostBreakdown b = new CostBreakdown(0, 0, 0, 0, 0, 0, 0, 0, 900, 0, 0);
         assertTrue(a.weighted(1_000_000) > b.weighted(1_000_000));
     }
 }

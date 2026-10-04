@@ -111,13 +111,16 @@ public final class GreedySolver implements TimetableSolver {
         return c != 0 ? c : Double.compare(tie[a], tie[b]);
     }
 
-    /** Places {@code e} at the (slot, room) pair with the smallest weighted cost increase. */
+    /**
+     * Places {@code e} at the (slot, room) pair with the smallest weighted cost increase. Only the
+     * slots available to {@code e} are considered (every slot if the event has none).
+     */
     static void placeBest(TimetablingProblem p, TimetableState state, int e) {
         long before = state.weighted(HARD_WEIGHT);
         long bestDelta = Long.MAX_VALUE;
         int bestSlot = 0;
         int bestRoom = 0;
-        for (int t = 0; t < p.slotCount(); t++) {
+        for (int t : candidateSlots(p, e)) {
             int room = chooseRoom(p, state, e, t);
             state.assign(e, t, room);
             long delta = state.weighted(HARD_WEIGHT) - before;
@@ -130,9 +133,23 @@ public final class GreedySolver implements TimetableSolver {
         state.assign(e, bestSlot, bestRoom);
     }
 
+    /** Slots available to {@code e}, or every slot when none is (the violation is then unavoidable). */
+    static int[] candidateSlots(TimetablingProblem p, int e) {
+        int[] slots = p.availableSlotsOf(e);
+        return slots.length > 0 ? slots : IntStream.range(0, p.slotCount()).toArray();
+    }
+
+    /** A uniformly random slot among those available to {@code e} (any slot when none is). */
+    static int randomSlot(TimetablingProblem p, int e, SplittableRandom rng) {
+        int[] slots = p.availableSlotsOf(e);
+        return slots.length > 0 ? slots[rng.nextInt(slots.length)] : rng.nextInt(p.slotCount());
+    }
+
     /**
-     * Best-fit free room for {@code e} in {@code slot}; if every suitable room is taken, the largest
-     * free room (capacity violation) or else the least-occupied suitable room (double booking).
+     * Best-fit free suitable room for {@code e} in {@code slot}; if every suitable room is taken,
+     * the largest free room offering the required features (capacity violation), then the largest
+     * free room of any kind (feature violation), or else the least-occupied suitable room (double
+     * booking). Without room features the second step never applies.
      */
     static int chooseRoom(TimetablingProblem p, TimetableState state, int e, int slot) {
         for (int r : p.suitableRoomsOf(e)) {
@@ -140,12 +157,9 @@ public final class GreedySolver implements TimetableSolver {
                 return r;
             }
         }
-        int largestFree = -1;
-        for (int r = 0; r < p.roomCount(); r++) {
-            if (state.roomOccupancy(r, slot) == 0
-                    && (largestFree < 0 || p.capacityOf(r) > p.capacityOf(largestFree))) {
-                largestFree = r;
-            }
+        int largestFree = largestFree(p, state, slot, p.featureRoomsOf(e));
+        if (largestFree < 0 && p.featureRoomsOf(e).length < p.roomCount()) {
+            largestFree = largestFree(p, state, slot, IntStream.range(0, p.roomCount()).toArray());
         }
         if (largestFree >= 0) {
             return largestFree;
@@ -160,5 +174,16 @@ public final class GreedySolver implements TimetableSolver {
             }
         }
         return best;
+    }
+
+    private static int largestFree(TimetablingProblem p, TimetableState state, int slot, int[] rooms) {
+        int largestFree = -1;
+        for (int r : rooms) {
+            if (state.roomOccupancy(r, slot) == 0
+                    && (largestFree < 0 || p.capacityOf(r) > p.capacityOf(largestFree))) {
+                largestFree = r;
+            }
+        }
+        return largestFree;
     }
 }

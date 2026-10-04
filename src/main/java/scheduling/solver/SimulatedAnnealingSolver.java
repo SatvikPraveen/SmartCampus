@@ -11,7 +11,8 @@ import scheduling.model.TimetablingProblem;
  * <p>The search starts from the solution of an initial constructive solver and minimises
  * {@code HARD_WEIGHT * hard + soft}. Two neighbourhoods are sampled with equal probability:</p>
  * <ul>
- *   <li><b>relocate</b> &ndash; move one event to a random slot, using the best-fit free room there;</li>
+ *   <li><b>relocate</b> &ndash; move one event to a random slot available to it, using the best-fit
+ *       free room there;</li>
  *   <li><b>swap</b> &ndash; exchange the (slot, room) pairs of two events.</li>
  * </ul>
  * <p>Moves are accepted with the Metropolis criterion {@code exp(-delta / T)}. The temperature
@@ -147,7 +148,7 @@ public final class SimulatedAnnealingSolver implements TimetableSolver {
     private static void propose(TimetablingProblem p, TimetableState s, SplittableRandom rng, Move m) {
         int a = rng.nextInt(p.eventCount());
         if (rng.nextBoolean()) {
-            int slot = rng.nextInt(p.slotCount());
+            int slot = GreedySolver.randomSlot(p, a, rng);
             m.set(a, s.slotOf(a), s.roomOf(a), slot, GreedySolver.chooseRoom(p, s, a, slot));
         } else {
             int b = rng.nextInt(p.eventCount() - 1);

@@ -35,6 +35,8 @@ public final class CostModel {
         int[][] roomSlot = new int[p.roomCount()][t];
         long unassigned = 0;
         long capacity = 0;
+        long features = 0;
+        long unavailable = 0;
         for (int e = 0; e < n; e++) {
             if (slots[e] == UNASSIGNED) {
                 unassigned++;
@@ -49,6 +51,21 @@ public final class CostModel {
             roomSlot[rooms[e]][slots[e]]++;
             if (p.capacityOf(rooms[e]) < p.studentsOf(e).length) {
                 capacity++;
+            }
+            if (!p.events().get(e).requiredFeatures().stream()
+                    .allMatch(p.rooms().get(rooms[e]).features()::contains)) {
+                features++;
+            }
+            if (!p.isAvailable(e, slots[e])) {
+                unavailable++;
+            }
+        }
+        long precedence = 0;
+        for (int k = 0; k < p.precedenceCount(); k++) {
+            int a = p.precedenceBefore(k);
+            int b = p.precedenceAfter(k);
+            if (slots[a] != UNASSIGNED && slots[b] != UNASSIGNED && slots[a] >= slots[b]) {
+                precedence++;
             }
         }
         long lastPeriod = 0;
@@ -76,7 +93,7 @@ public final class CostModel {
             }
         }
         return new CostBreakdown(unassigned, excess(studentSlot), excess(instructorSlot),
-                excess(roomSlot), capacity, lastPeriod, consecutive, single);
+                excess(roomSlot), capacity, features, unavailable, precedence, lastPeriod, consecutive, single);
     }
 
     private static long excess(int[][] counts) {

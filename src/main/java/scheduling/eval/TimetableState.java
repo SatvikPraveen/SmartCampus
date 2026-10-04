@@ -8,9 +8,10 @@ import scheduling.model.TimetablingProblem;
  * Mutable timetable with exact incremental cost bookkeeping.
  *
  * <p>The state stores occupancy counts per (student, slot), (instructor, slot) and (room, slot).
- * Every cost component in {@link CostBreakdown} is a function of these counts, so moving one event
- * only requires re-evaluating the rows touched by that event: its students on the source and
- * target days, its instructor and its rooms. The cost of {@link #assign} is therefore
+ * Every cost component in {@link CostBreakdown} is a function of these counts or of the moved
+ * event's own placement, so moving one event only requires re-evaluating the rows touched by that
+ * event: its students on the source and target days, its instructor, its rooms, its slot
+ * availability and the precedence constraints it takes part in. The cost of {@link #assign} is therefore
  * {@code O(|students(e)| * periodsPerDay)} instead of the {@code O(students * slots)} of a full
  * {@link CostModel#evaluate} call. Equality with the reference model is enforced by property
  * tests.</p>
@@ -30,6 +31,9 @@ public final class TimetableState {
     private long instructorClashes;
     private long roomClashes;
     private long capacityViolations;
+    private long featureViolations;
+    private long unavailableSlots;
+    private long precedenceViolations;
     private long lastPeriod;
     private long consecutive;
     private long singleClassDays;
@@ -61,6 +65,9 @@ public final class TimetableState {
         this.instructorClashes = o.instructorClashes;
         this.roomClashes = o.roomClashes;
         this.capacityViolations = o.capacityViolations;
+        this.featureViolations = o.featureViolations;
+        this.unavailableSlots = o.unavailableSlots;
+        this.precedenceViolations = o.precedenceViolations;
         this.lastPeriod = o.lastPeriod;
         this.consecutive = o.consecutive;
         this.singleClassDays = o.singleClassDays;
@@ -105,7 +112,8 @@ public final class TimetableState {
     }
 
     public long hard() {
-        return unassigned + studentClashes + instructorClashes + roomClashes + capacityViolations;
+        return unassigned + studentClashes + instructorClashes + roomClashes + capacityViolations
+                + featureViolations + unavailableSlots + precedenceViolations;
     }
 
     public long soft() {
@@ -118,7 +126,8 @@ public final class TimetableState {
 
     public CostBreakdown cost() {
         return new CostBreakdown(unassigned, studentClashes, instructorClashes, roomClashes,
-                capacityViolations, lastPeriod, consecutive, singleClassDays);
+                capacityViolations, featureViolations, unavailableSlots, precedenceViolations,
+                lastPeriod, consecutive, singleClassDays);
     }
 
     /**
@@ -137,6 +146,10 @@ public final class TimetableState {
         for (int s : students) {
             subtractDays(s, oldDay, newDay);
         }
+        int[] precedences = p.precedencesOf(e);
+        for (int k : precedences) {
+            precedenceViolations -= precedenceViolated(k);
+        }
         if (oldSlot != CostModel.UNASSIGNED) {
             remove(e, oldSlot, roomOf[e]);
         } else {
@@ -152,6 +165,15 @@ public final class TimetableState {
         for (int s : students) {
             addDays(s, oldDay, newDay);
         }
+        for (int k : precedences) {
+            precedenceViolations += precedenceViolated(k);
+        }
+    }
+
+    private int precedenceViolated(int k) {
+        int a = slotOf[p.precedenceBefore(k)];
+        int b = slotOf[p.precedenceAfter(k)];
+        return a != CostModel.UNASSIGNED && b != CostModel.UNASSIGNED && a >= b ? 1 : 0;
     }
 
     /** Convenience for {@code assign(e, UNASSIGNED, UNASSIGNED)}. */
@@ -175,6 +197,12 @@ public final class TimetableState {
         if (p.capacityOf(room) < p.studentsOf(e).length) {
             capacityViolations--;
         }
+        if (!p.hasRequiredFeatures(e, room)) {
+            featureViolations--;
+        }
+        if (!p.isAvailable(e, slot)) {
+            unavailableSlots--;
+        }
     }
 
     private void add(int e, int slot, int room) {
@@ -192,6 +220,12 @@ public final class TimetableState {
         }
         if (p.capacityOf(room) < p.studentsOf(e).length) {
             capacityViolations++;
+        }
+        if (!p.hasRequiredFeatures(e, room)) {
+            featureViolations++;
+        }
+        if (!p.isAvailable(e, slot)) {
+            unavailableSlots++;
         }
     }
 

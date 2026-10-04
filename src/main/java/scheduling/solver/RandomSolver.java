@@ -6,8 +6,8 @@ import scheduling.eval.TimetableState;
 import scheduling.model.TimetablingProblem;
 
 /**
- * Zero-information baseline: every event receives a uniformly random slot and a uniformly random
- * room among those large enough for it (any room if none is). Any useful solver must beat it.
+ * Zero-information baseline: every event receives a uniformly random slot among those available to
+ * it and a uniformly random room among the suitable ones (any room if none is). Any useful solver must beat it.
  */
 public final class RandomSolver implements TimetableSolver {
 
@@ -25,7 +25,7 @@ public final class RandomSolver implements TimetableSolver {
             int room = suitable.length > 0
                     ? suitable[rng.nextInt(suitable.length)]
                     : rng.nextInt(p.roomCount());
-            state.assign(e, rng.nextInt(p.slotCount()), room);
+            state.assign(e, GreedySolver.randomSlot(p, e, rng), room);
         }
         return state;
     }
