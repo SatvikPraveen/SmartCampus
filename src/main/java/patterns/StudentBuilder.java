@@ -4,6 +4,8 @@ package patterns;
 
 import models.*;
 import utils.ValidationUtil;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 
 /**
@@ -15,7 +17,8 @@ public class StudentBuilder {
     private String id;
     private String name;
     private String email;
-    private Department department;
+    private String departmentId;
+    private String departmentName;
     private Date enrollmentDate;
     private Map<String, Object> additionalProperties;
     private boolean validateOnBuild = true;
@@ -53,18 +56,18 @@ public class StudentBuilder {
      * Set student department
      */
     public StudentBuilder department(Department department) {
-        this.department = department;
+        this.departmentId = department != null ? department.getDepartmentId() : null;
+        this.departmentName = department != null ? department.getDepartmentName() : null;
         return this;
     }
     
     /**
-     * Set student department by code
+     * Set student department by ID
      */
-    public StudentBuilder departmentCode(String departmentCode) {
-        // In a real implementation, you'd look up the department
-        // For now, create a minimal department object
-        if (departmentCode != null && !departmentCode.trim().isEmpty()) {
-            this.department = new Department(departmentCode, "", "", "", 0, 0);
+    public StudentBuilder departmentId(String departmentId) {
+        if (departmentId != null && !departmentId.trim().isEmpty()) {
+            this.departmentId = departmentId;
+            this.departmentName = null;
         }
         return this;
     }
@@ -335,11 +338,11 @@ public class StudentBuilder {
      */
     public static StudentBuilder from(Student existingStudent) {
         return new StudentBuilder()
-            .id(existingStudent.getId())
-            .name(existingStudent.getName())
+            .id(existingStudent.getStudentId())
+            .name(existingStudent.getFullName())
             .email(existingStudent.getEmail())
-            .department(existingStudent.getDepartment())
-            .enrollmentDate(existingStudent.getEnrollmentDate());
+            .departmentId(existingStudent.getDepartmentId())
+            .enrollmentDate(toDate(existingStudent.getEnrollmentDate()));
     }
     
     /**
@@ -382,7 +385,11 @@ public class StudentBuilder {
             errors.add("Student email format is invalid");
         }
         
-        if (department == null) {
+        if (!ValidationUtil.isEmpty(name) && name.trim().indexOf(' ') < 0) {
+            errors.add("Student name must include a first and last name");
+        }
+        
+        if (ValidationUtil.isEmpty(departmentId)) {
             errors.add("Student department is required");
         }
         
@@ -455,7 +462,8 @@ public class StudentBuilder {
         this.id = null;
         this.name = null;
         this.email = null;
-        this.department = null;
+        this.departmentId = null;
+        this.departmentName = null;
         this.enrollmentDate = new Date();
         this.additionalProperties.clear();
         this.validateOnBuild = true;
@@ -469,7 +477,7 @@ public class StudentBuilder {
         return !ValidationUtil.isEmpty(id) &&
                !ValidationUtil.isEmpty(name) &&
                !ValidationUtil.isEmpty(email) &&
-               department != null &&
+               !ValidationUtil.isEmpty(departmentId) &&
                enrollmentDate != null;
     }
     
@@ -482,7 +490,7 @@ public class StudentBuilder {
         sb.append("ID: ").append(id != null ? id : "Not set").append("\n");
         sb.append("Name: ").append(name != null ? name : "Not set").append("\n");
         sb.append("Email: ").append(email != null ? email : "Not set").append("\n");
-        sb.append("Department: ").append(department != null ? department.getName() : "Not set").append("\n");
+        sb.append("Department: ").append(departmentName != null ? departmentName : (departmentId != null ? departmentId : "Not set")).append("\n");
         sb.append("Enrollment Date: ").append(enrollmentDate != null ? enrollmentDate : "Not set").append("\n");
         sb.append("Additional Properties: ").append(additionalProperties.size()).append(" items\n");
         sb.append("Complete: ").append(isComplete()).append("\n");
@@ -497,14 +505,41 @@ public class StudentBuilder {
             validate();
         }
         
-        // Create the base Student object
-        Student student = new Student(id, name, email, department, enrollmentDate);
+        String fullName = name.trim();
+        int split = fullName.lastIndexOf(' ');
+        String firstName = split > 0 ? fullName.substring(0, split) : fullName;
+        String lastName = split > 0 ? fullName.substring(split + 1) : fullName;
+        String major = (String) additionalProperties.getOrDefault("major", departmentName);
         
-        // Apply additional properties if the Student class supports them
-        // In a real implementation, you might use reflection or extend the Student class
-        // For now, we'll create the basic student object
+        // Create the base Student object
+        Student student = new Student(id, firstName, lastName, email,
+                                      (String) additionalProperties.get("phoneNumber"),
+                                      id, major, resolveAcademicYear());
+        student.setDepartmentId(departmentId);
+        student.setEnrollmentDate(enrollmentDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDate());
+        
+        Object gpa = additionalProperties.get("gpa");
+        if (gpa instanceof Double) {
+            student.setGpa((Double) gpa);
+        }
         
         return student;
+    }
+    
+    private Student.AcademicYear resolveAcademicYear() {
+        Object yearLevel = additionalProperties.get("yearLevel");
+        if (yearLevel instanceof Integer) {
+            for (Student.AcademicYear academicYear : Student.AcademicYear.values()) {
+                if (academicYear.getYear() == (Integer) yearLevel) {
+                    return academicYear;
+                }
+            }
+        }
+        return Student.AcademicYear.FRESHMAN;
+    }
+    
+    private static Date toDate(LocalDate localDate) {
+        return localDate != null ? Date.from(localDate.atStartOfDay(ZoneId.systemDefault()).toInstant()) : null;
     }
     
     /**
@@ -522,7 +557,7 @@ public class StudentBuilder {
                 .id(variationId)
                 .name(name + " " + (i + 1))
                 .email(variationEmail)
-                .department(department)
+                .departmentId(departmentId)
                 .enrollmentDate(enrollmentDate)
                 .properties(additionalProperties)
                 .validateOnBuild(validateOnBuild)

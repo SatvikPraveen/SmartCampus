@@ -332,7 +332,10 @@ public class JsonProcessor {
                                                Class<T> inputClass, Class<R> outputClass,
                                                Function<T, R> transformer) throws IOException {
         
-        List<T> inputObjects = readFromJsonFile(inputFile, 
+        if (!Files.exists(inputFile)) {
+            throw new FileNotFoundException("JSON file not found: " + inputFile);
+        }
+        List<T> inputObjects = objectMapper.readValue(inputFile.toFile(),
             TypeFactory.defaultInstance().constructCollectionType(List.class, inputClass));
         
         List<R> outputObjects = inputObjects.stream()

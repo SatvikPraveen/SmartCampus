@@ -3,9 +3,7 @@
 package patterns;
 
 import services.*;
-import repositories.*;
 import concurrent.*;
-import io.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -69,22 +67,59 @@ public abstract class ServiceFactory {
     public abstract DepartmentService createDepartmentService();
     public abstract EnrollmentService createEnrollmentService();
     public abstract GradeService createGradeService();
-    public abstract ReportService createReportService();
-    public abstract SearchService createSearchService();
     public abstract NotificationService createNotificationService();
     
-    // Convenience method to create all services
+    /**
+     * Create a report service wired to the given core services
+     */
+    public abstract ReportService createReportService(StudentService studentService, ProfessorService professorService,
+                                                      CourseService courseService, DepartmentService departmentService,
+                                                      EnrollmentService enrollmentService, GradeService gradeService);
+    
+    /**
+     * Create a search service wired to the given core services
+     */
+    public abstract SearchService createSearchService(StudentService studentService, ProfessorService professorService,
+                                                      CourseService courseService, DepartmentService departmentService,
+                                                      EnrollmentService enrollmentService, GradeService gradeService);
+    
+    /**
+     * Create a report service backed by freshly created core services
+     */
+    public ReportService createReportService() {
+        return createReportService(createStudentService(), createProfessorService(), createCourseService(),
+                                   createDepartmentService(), createEnrollmentService(), createGradeService());
+    }
+    
+    /**
+     * Create a search service backed by freshly created core services
+     */
+    public SearchService createSearchService() {
+        return createSearchService(createStudentService(), createProfessorService(), createCourseService(),
+                                   createDepartmentService(), createEnrollmentService(), createGradeService());
+    }
+    
+    // Convenience method to create all services, sharing the core services between report and search
     public ServiceBundle createAllServices() {
+        StudentService studentService = createStudentService();
+        ProfessorService professorService = createProfessorService();
+        CourseService courseService = createCourseService();
+        DepartmentService departmentService = createDepartmentService();
+        EnrollmentService enrollmentService = createEnrollmentService();
+        GradeService gradeService = createGradeService();
+        
         return new ServiceBundle(
             createAuthService(),
-            createStudentService(),
-            createProfessorService(),
-            createCourseService(),
-            createDepartmentService(),
-            createEnrollmentService(),
-            createGradeService(),
-            createReportService(),
-            createSearchService(),
+            studentService,
+            professorService,
+            courseService,
+            departmentService,
+            enrollmentService,
+            gradeService,
+            createReportService(studentService, professorService, courseService,
+                                departmentService, enrollmentService, gradeService),
+            createSearchService(studentService, professorService, courseService,
+                                departmentService, enrollmentService, gradeService),
             createNotificationService()
         );
     }
@@ -92,57 +127,55 @@ public abstract class ServiceFactory {
     // Standard implementation of the service factory
     public static class StandardServiceFactory extends ServiceFactory {
         
-        private final StudentRepository studentRepository = new StudentRepository();
-        private final ProfessorRepository professorRepository = new ProfessorRepository();
-        private final CourseRepository courseRepository = new CourseRepository();
-        private final DepartmentRepository departmentRepository = new DepartmentRepository();
-        private final EnrollmentRepository enrollmentRepository = new EnrollmentRepository();
-        
         @Override
         public AuthService createAuthService() {
-            return new AuthService(studentRepository, professorRepository);
+            return AuthService.getInstance();
         }
         
         @Override
         public StudentService createStudentService() {
-            return new StudentService(studentRepository, departmentRepository);
+            return new StudentService();
         }
         
         @Override
         public ProfessorService createProfessorService() {
-            return new ProfessorService(professorRepository, departmentRepository);
+            return new ProfessorService();
         }
         
         @Override
         public CourseService createCourseService() {
-            return new CourseService(courseRepository, departmentRepository, professorRepository);
+            return new CourseService();
         }
         
         @Override
         public DepartmentService createDepartmentService() {
-            return new DepartmentService(departmentRepository);
+            return new DepartmentService();
         }
         
         @Override
         public EnrollmentService createEnrollmentService() {
-            return new EnrollmentService(enrollmentRepository, studentRepository, courseRepository);
+            return new EnrollmentService();
         }
         
         @Override
         public GradeService createGradeService() {
-            return new GradeService(enrollmentRepository, courseRepository, studentRepository);
+            return new GradeService();
         }
         
         @Override
-        public ReportService createReportService() {
-            return new ReportService(studentRepository, professorRepository, 
-                                   courseRepository, enrollmentRepository);
+        public ReportService createReportService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
+            return new ReportService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService);
         }
         
         @Override
-        public SearchService createSearchService() {
-            return new SearchService(studentRepository, professorRepository, 
-                                   courseRepository, departmentRepository);
+        public SearchService createSearchService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
+            return new SearchService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService);
         }
         
         @Override
@@ -154,15 +187,9 @@ public abstract class ServiceFactory {
     // Concurrent implementation with enhanced performance
     public static class ConcurrentServiceFactory extends ServiceFactory {
         
-        private final StudentRepository studentRepository = new StudentRepository();
-        private final ProfessorRepository professorRepository = new ProfessorRepository();
-        private final CourseRepository courseRepository = new CourseRepository();
-        private final DepartmentRepository departmentRepository = new DepartmentRepository();
-        private final EnrollmentRepository enrollmentRepository = new EnrollmentRepository();
-        
         // Concurrent processors
         private final EnrollmentProcessor enrollmentProcessor = new EnrollmentProcessor(
-            new EnrollmentService(enrollmentRepository, studentRepository, courseRepository),
+            new EnrollmentService(),
             new NotificationService()
         );
         private final AsyncNotificationSender notificationSender = new AsyncNotificationSender(
@@ -172,52 +199,53 @@ public abstract class ServiceFactory {
         
         @Override
         public AuthService createAuthService() {
-            return new EnhancedAuthService(studentRepository, professorRepository);
+            return AuthService.getInstance();
         }
         
         @Override
         public StudentService createStudentService() {
-            return new ConcurrentStudentService(studentRepository, departmentRepository, batchProcessor);
+            return new ConcurrentStudentService(batchProcessor);
         }
         
         @Override
         public ProfessorService createProfessorService() {
-            return new ConcurrentProfessorService(professorRepository, departmentRepository, batchProcessor);
+            return new ConcurrentProfessorService(batchProcessor);
         }
         
         @Override
         public CourseService createCourseService() {
-            return new ConcurrentCourseService(courseRepository, departmentRepository, 
-                                             professorRepository, batchProcessor);
+            return new ConcurrentCourseService(batchProcessor);
         }
         
         @Override
         public DepartmentService createDepartmentService() {
-            return new DepartmentService(departmentRepository);
+            return new DepartmentService();
         }
         
         @Override
         public EnrollmentService createEnrollmentService() {
-            return new ConcurrentEnrollmentService(enrollmentRepository, studentRepository, 
-                                                  courseRepository, enrollmentProcessor);
+            return new ConcurrentEnrollmentService(enrollmentProcessor);
         }
         
         @Override
         public GradeService createGradeService() {
-            return new ConcurrentGradeService(enrollmentRepository, courseRepository, 
-                                            studentRepository, batchProcessor);
+            return new ConcurrentGradeService(batchProcessor);
         }
         
         @Override
-        public ReportService createReportService() {
-            return new ConcurrentReportService(studentRepository, professorRepository, 
-                                             courseRepository, enrollmentRepository, batchProcessor);
+        public ReportService createReportService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
+            return new ConcurrentReportService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService, batchProcessor);
         }
         
         @Override
-        public SearchService createSearchService() {
-            return new ConcurrentSearchService(studentRepository, professorRepository, 
-                                             courseRepository, departmentRepository);
+        public SearchService createSearchService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
+            return new ConcurrentSearchService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService);
         }
         
         @Override
@@ -229,69 +257,60 @@ public abstract class ServiceFactory {
     // Cached implementation for improved performance
     public static class CachedServiceFactory extends ServiceFactory {
         
-        private final StudentRepository studentRepository = new StudentRepository();
-        private final ProfessorRepository professorRepository = new ProfessorRepository();
-        private final CourseRepository courseRepository = new CourseRepository();
-        private final DepartmentRepository departmentRepository = new DepartmentRepository();
-        private final EnrollmentRepository enrollmentRepository = new EnrollmentRepository();
-        
         // Cache managers
         private final Map<String, Object> serviceCache = new ConcurrentHashMap<>();
         
         @Override
         public AuthService createAuthService() {
-            return (AuthService) serviceCache.computeIfAbsent("auth", 
-                k -> new CachedAuthService(studentRepository, professorRepository));
+            return (AuthService) serviceCache.computeIfAbsent("auth", k -> AuthService.getInstance());
         }
         
         @Override
         public StudentService createStudentService() {
-            return (StudentService) serviceCache.computeIfAbsent("student",
-                k -> new CachedStudentService(studentRepository, departmentRepository));
+            return (StudentService) serviceCache.computeIfAbsent("student", k -> new CachedStudentService());
         }
         
         @Override
         public ProfessorService createProfessorService() {
-            return (ProfessorService) serviceCache.computeIfAbsent("professor",
-                k -> new CachedProfessorService(professorRepository, departmentRepository));
+            return (ProfessorService) serviceCache.computeIfAbsent("professor", k -> new CachedProfessorService());
         }
         
         @Override
         public CourseService createCourseService() {
-            return (CourseService) serviceCache.computeIfAbsent("course",
-                k -> new CachedCourseService(courseRepository, departmentRepository, professorRepository));
+            return (CourseService) serviceCache.computeIfAbsent("course", k -> new CachedCourseService());
         }
         
         @Override
         public DepartmentService createDepartmentService() {
-            return (DepartmentService) serviceCache.computeIfAbsent("department",
-                k -> new CachedDepartmentService(departmentRepository));
+            return (DepartmentService) serviceCache.computeIfAbsent("department", k -> new CachedDepartmentService());
         }
         
         @Override
         public EnrollmentService createEnrollmentService() {
-            return (EnrollmentService) serviceCache.computeIfAbsent("enrollment",
-                k -> new CachedEnrollmentService(enrollmentRepository, studentRepository, courseRepository));
+            return (EnrollmentService) serviceCache.computeIfAbsent("enrollment", k -> new CachedEnrollmentService());
         }
         
         @Override
         public GradeService createGradeService() {
-            return (GradeService) serviceCache.computeIfAbsent("grade",
-                k -> new CachedGradeService(enrollmentRepository, courseRepository, studentRepository));
+            return (GradeService) serviceCache.computeIfAbsent("grade", k -> new CachedGradeService());
         }
         
         @Override
-        public ReportService createReportService() {
+        public ReportService createReportService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
             return (ReportService) serviceCache.computeIfAbsent("report",
-                k -> new CachedReportService(studentRepository, professorRepository, 
-                                           courseRepository, enrollmentRepository));
+                k -> new CachedReportService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService));
         }
         
         @Override
-        public SearchService createSearchService() {
+        public SearchService createSearchService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
             return (SearchService) serviceCache.computeIfAbsent("search",
-                k -> new CachedSearchService(studentRepository, professorRepository, 
-                                            courseRepository, departmentRepository));
+                k -> new CachedSearchService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService));
         }
         
         @Override
@@ -306,7 +325,7 @@ public abstract class ServiceFactory {
         
         @Override
         public AuthService createAuthService() {
-            return new MockAuthService();
+            return AuthService.getInstance();
         }
         
         @Override
@@ -340,13 +359,19 @@ public abstract class ServiceFactory {
         }
         
         @Override
-        public ReportService createReportService() {
-            return new MockReportService();
+        public ReportService createReportService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
+            return new MockReportService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService);
         }
         
         @Override
-        public SearchService createSearchService() {
-            return new MockSearchService();
+        public SearchService createSearchService(StudentService studentService, ProfessorService professorService,
+                                                 CourseService courseService, DepartmentService departmentService,
+                                                 EnrollmentService enrollmentService, GradeService gradeService) {
+            return new MockSearchService(studentService, professorService, courseService,
+                                     departmentService, enrollmentService, gradeService);
         }
         
         @Override
@@ -428,18 +453,11 @@ public abstract class ServiceFactory {
     // Placeholder classes for enhanced service implementations
     // In a real implementation, these would be fully implemented classes
     
-    private static class EnhancedAuthService extends AuthService {
-        public EnhancedAuthService(StudentRepository studentRepo, ProfessorRepository profRepo) {
-            super(studentRepo, profRepo);
-        }
-    }
-    
     private static class ConcurrentStudentService extends StudentService {
         private final BatchProcessor batchProcessor;
         
-        public ConcurrentStudentService(StudentRepository repo, DepartmentRepository deptRepo, 
-                                      BatchProcessor batchProcessor) {
-            super(repo, deptRepo);
+        public ConcurrentStudentService(BatchProcessor batchProcessor) {
+            super();
             this.batchProcessor = batchProcessor;
         }
     }
@@ -447,9 +465,8 @@ public abstract class ServiceFactory {
     private static class ConcurrentProfessorService extends ProfessorService {
         private final BatchProcessor batchProcessor;
         
-        public ConcurrentProfessorService(ProfessorRepository repo, DepartmentRepository deptRepo,
-                                        BatchProcessor batchProcessor) {
-            super(repo, deptRepo);
+        public ConcurrentProfessorService(BatchProcessor batchProcessor) {
+            super();
             this.batchProcessor = batchProcessor;
         }
     }
@@ -457,9 +474,8 @@ public abstract class ServiceFactory {
     private static class ConcurrentCourseService extends CourseService {
         private final BatchProcessor batchProcessor;
         
-        public ConcurrentCourseService(CourseRepository repo, DepartmentRepository deptRepo,
-                                     ProfessorRepository profRepo, BatchProcessor batchProcessor) {
-            super(repo, deptRepo, profRepo);
+        public ConcurrentCourseService(BatchProcessor batchProcessor) {
+            super();
             this.batchProcessor = batchProcessor;
         }
     }
@@ -467,9 +483,8 @@ public abstract class ServiceFactory {
     private static class ConcurrentEnrollmentService extends EnrollmentService {
         private final EnrollmentProcessor enrollmentProcessor;
         
-        public ConcurrentEnrollmentService(EnrollmentRepository repo, StudentRepository studentRepo,
-                                         CourseRepository courseRepo, EnrollmentProcessor processor) {
-            super(repo, studentRepo, courseRepo);
+        public ConcurrentEnrollmentService(EnrollmentProcessor processor) {
+            super();
             this.enrollmentProcessor = processor;
         }
     }
@@ -477,9 +492,8 @@ public abstract class ServiceFactory {
     private static class ConcurrentGradeService extends GradeService {
         private final BatchProcessor batchProcessor;
         
-        public ConcurrentGradeService(EnrollmentRepository enrollRepo, CourseRepository courseRepo,
-                                    StudentRepository studentRepo, BatchProcessor batchProcessor) {
-            super(enrollRepo, courseRepo, studentRepo);
+        public ConcurrentGradeService(BatchProcessor batchProcessor) {
+            super();
             this.batchProcessor = batchProcessor;
         }
     }
@@ -487,18 +501,20 @@ public abstract class ServiceFactory {
     private static class ConcurrentReportService extends ReportService {
         private final BatchProcessor batchProcessor;
         
-        public ConcurrentReportService(StudentRepository studentRepo, ProfessorRepository profRepo,
-                                     CourseRepository courseRepo, EnrollmentRepository enrollRepo,
-                                     BatchProcessor batchProcessor) {
-            super(studentRepo, profRepo, courseRepo, enrollRepo);
+        public ConcurrentReportService(StudentService studentService, ProfessorService professorService,
+                       CourseService courseService, DepartmentService departmentService,
+                       EnrollmentService enrollmentService, GradeService gradeService,
+                       BatchProcessor batchProcessor) {
+            super(studentService, professorService, courseService, departmentService, enrollmentService, gradeService);
             this.batchProcessor = batchProcessor;
         }
     }
     
     private static class ConcurrentSearchService extends SearchService {
-        public ConcurrentSearchService(StudentRepository studentRepo, ProfessorRepository profRepo,
-                                     CourseRepository courseRepo, DepartmentRepository deptRepo) {
-            super(studentRepo, profRepo, courseRepo, deptRepo);
+        public ConcurrentSearchService(StudentService studentService, ProfessorService professorService,
+                       CourseService courseService, DepartmentService departmentService,
+                       EnrollmentService enrollmentService, GradeService gradeService) {
+            super(studentService, professorService, courseService, departmentService, enrollmentService, gradeService);
         }
     }
     
@@ -511,126 +527,78 @@ public abstract class ServiceFactory {
     }
     
     // Cached service implementations (placeholder)
-    private static class CachedAuthService extends AuthService {
-        public CachedAuthService(StudentRepository studentRepo, ProfessorRepository profRepo) {
-            super(studentRepo, profRepo);
-        }
-    }
-    
     private static class CachedStudentService extends StudentService {
-        public CachedStudentService(StudentRepository repo, DepartmentRepository deptRepo) {
-            super(repo, deptRepo);
-        }
     }
     
     private static class CachedProfessorService extends ProfessorService {
-        public CachedProfessorService(ProfessorRepository repo, DepartmentRepository deptRepo) {
-            super(repo, deptRepo);
-        }
     }
     
     private static class CachedCourseService extends CourseService {
-        public CachedCourseService(CourseRepository repo, DepartmentRepository deptRepo, ProfessorRepository profRepo) {
-            super(repo, deptRepo, profRepo);
-        }
     }
     
     private static class CachedDepartmentService extends DepartmentService {
-        public CachedDepartmentService(DepartmentRepository repo) {
-            super(repo);
-        }
     }
     
     private static class CachedEnrollmentService extends EnrollmentService {
-        public CachedEnrollmentService(EnrollmentRepository repo, StudentRepository studentRepo, CourseRepository courseRepo) {
-            super(repo, studentRepo, courseRepo);
-        }
     }
     
     private static class CachedGradeService extends GradeService {
-        public CachedGradeService(EnrollmentRepository enrollRepo, CourseRepository courseRepo, StudentRepository studentRepo) {
-            super(enrollRepo, courseRepo, studentRepo);
-        }
     }
     
     private static class CachedReportService extends ReportService {
-        public CachedReportService(StudentRepository studentRepo, ProfessorRepository profRepo,
-                                 CourseRepository courseRepo, EnrollmentRepository enrollRepo) {
-            super(studentRepo, profRepo, courseRepo, enrollRepo);
+        public CachedReportService(StudentService studentService, ProfessorService professorService,
+                       CourseService courseService, DepartmentService departmentService,
+                       EnrollmentService enrollmentService, GradeService gradeService) {
+            super(studentService, professorService, courseService, departmentService, enrollmentService, gradeService);
         }
     }
     
     private static class CachedSearchService extends SearchService {
-        public CachedSearchService(StudentRepository studentRepo, ProfessorRepository profRepo,
-                                 CourseRepository courseRepo, DepartmentRepository deptRepo) {
-            super(studentRepo, profRepo, courseRepo, deptRepo);
+        public CachedSearchService(StudentService studentService, ProfessorService professorService,
+                       CourseService courseService, DepartmentService departmentService,
+                       EnrollmentService enrollmentService, GradeService gradeService) {
+            super(studentService, professorService, courseService, departmentService, enrollmentService, gradeService);
         }
     }
     
     private static class CachedNotificationService extends NotificationService {
-        public CachedNotificationService() {
-            super();
-        }
     }
     
     // Mock service implementations for testing
-    private static class MockAuthService extends AuthService {
-        public MockAuthService() {
-            super(null, null);
-        }
-    }
-    
     private static class MockStudentService extends StudentService {
-        public MockStudentService() {
-            super(null, null);
-        }
     }
     
     private static class MockProfessorService extends ProfessorService {
-        public MockProfessorService() {
-            super(null, null);
-        }
     }
     
     private static class MockCourseService extends CourseService {
-        public MockCourseService() {
-            super(null, null, null);
-        }
     }
     
     private static class MockDepartmentService extends DepartmentService {
-        public MockDepartmentService() {
-            super(null);
-        }
     }
     
     private static class MockEnrollmentService extends EnrollmentService {
-        public MockEnrollmentService() {
-            super(null, null, null);
-        }
     }
     
     private static class MockGradeService extends GradeService {
-        public MockGradeService() {
-            super(null, null, null);
-        }
     }
     
     private static class MockReportService extends ReportService {
-        public MockReportService() {
-            super(null, null, null, null);
+        public MockReportService(StudentService studentService, ProfessorService professorService,
+                       CourseService courseService, DepartmentService departmentService,
+                       EnrollmentService enrollmentService, GradeService gradeService) {
+            super(studentService, professorService, courseService, departmentService, enrollmentService, gradeService);
         }
     }
     
     private static class MockSearchService extends SearchService {
-        public MockSearchService() {
-            super(null, null, null, null);
+        public MockSearchService(StudentService studentService, ProfessorService professorService,
+                       CourseService courseService, DepartmentService departmentService,
+                       EnrollmentService enrollmentService, GradeService gradeService) {
+            super(studentService, professorService, courseService, departmentService, enrollmentService, gradeService);
         }
     }
     
     private static class MockNotificationService extends NotificationService {
-        public MockNotificationService() {
-            super();
-        }
     }
 }

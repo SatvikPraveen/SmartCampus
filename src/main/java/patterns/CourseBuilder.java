@@ -16,12 +16,13 @@ public class CourseBuilder {
     private String name;
     private String description;
     private int credits;
-    private Department department;
-    private Professor professor;
+    private String departmentId;
+    private String departmentName;
+    private String professorId;
+    private String professorName;
     private String semester;
-    private String academicYear;
+    private int year;
     private int capacity;
-    private int enrolledStudents;
     private Map<String, Object> additionalProperties;
     private boolean validateOnBuild = true;
     
@@ -29,9 +30,8 @@ public class CourseBuilder {
         this.additionalProperties = new HashMap<>();
         this.credits = 3; // Default credit value
         this.capacity = 30; // Default capacity
-        this.enrolledStudents = 0;
         this.semester = getCurrentSemester();
-        this.academicYear = getCurrentAcademicYear();
+        this.year = getCurrentYear();
     }
     
     /**
@@ -73,16 +73,18 @@ public class CourseBuilder {
      * Set department
      */
     public CourseBuilder department(Department department) {
-        this.department = department;
+        this.departmentId = department != null ? department.getDepartmentId() : null;
+        this.departmentName = department != null ? department.getDepartmentName() : null;
         return this;
     }
     
     /**
-     * Set department by code
+     * Set department by ID
      */
-    public CourseBuilder departmentCode(String departmentCode) {
-        if (departmentCode != null && !departmentCode.trim().isEmpty()) {
-            this.department = new Department(departmentCode, "", "", "", 0, 0);
+    public CourseBuilder departmentId(String departmentId) {
+        if (departmentId != null && !departmentId.trim().isEmpty()) {
+            this.departmentId = departmentId;
+            this.departmentName = null;
         }
         return this;
     }
@@ -91,7 +93,8 @@ public class CourseBuilder {
      * Set professor
      */
     public CourseBuilder professor(Professor professor) {
-        this.professor = professor;
+        this.professorId = professor != null ? professor.getProfessorId() : null;
+        this.professorName = professor != null ? professor.getFullName() : null;
         return this;
     }
     
@@ -100,8 +103,8 @@ public class CourseBuilder {
      */
     public CourseBuilder professorId(String professorId) {
         if (professorId != null && !professorId.trim().isEmpty()) {
-            // In a real implementation, you'd look up the professor
-            this.professor = new Professor(professorId, "", "", null, "", "", 0);
+            this.professorId = professorId;
+            this.professorName = null;
         }
         return this;
     }
@@ -147,18 +150,18 @@ public class CourseBuilder {
     }
     
     /**
-     * Set academic year
+     * Set year
      */
-    public CourseBuilder academicYear(String academicYear) {
-        this.academicYear = academicYear;
+    public CourseBuilder year(int year) {
+        this.year = year;
         return this;
     }
     
     /**
-     * Set academic year as current year
+     * Set year as current year
      */
-    public CourseBuilder currentAcademicYear() {
-        this.academicYear = getCurrentAcademicYear();
+    public CourseBuilder currentYear() {
+        this.year = getCurrentYear();
         return this;
     }
     
@@ -194,36 +197,6 @@ public class CourseBuilder {
      */
     public CourseBuilder largeClass() {
         this.capacity = 50 + new Random().nextInt(51); // 50-100
-        return this;
-    }
-    
-    /**
-     * Set enrolled students count
-     */
-    public CourseBuilder enrolledStudents(int enrolledStudents) {
-        if (enrolledStudents < 0) {
-            throw new IllegalArgumentException("Enrolled students cannot be negative");
-        }
-        this.enrolledStudents = enrolledStudents;
-        return this;
-    }
-    
-    /**
-     * Set course as full capacity
-     */
-    public CourseBuilder fullCapacity() {
-        this.enrolledStudents = this.capacity;
-        return this;
-    }
-    
-    /**
-     * Set course with available spots
-     */
-    public CourseBuilder withAvailableSpots(int availableSpots) {
-        if (availableSpots < 0 || availableSpots > this.capacity) {
-            throw new IllegalArgumentException("Available spots must be between 0 and capacity");
-        }
-        this.enrolledStudents = this.capacity - availableSpots;
         return this;
     }
     
@@ -480,15 +453,15 @@ public class CourseBuilder {
     public static CourseBuilder from(Course existingCourse) {
         return new CourseBuilder()
             .courseCode(existingCourse.getCourseCode())
-            .name(existingCourse.getName())
+            .name(existingCourse.getCourseName())
             .description(existingCourse.getDescription())
             .credits(existingCourse.getCredits())
-            .department(existingCourse.getDepartment())
-            .professor(existingCourse.getProfessor())
+            .departmentId(existingCourse.getDepartmentId())
+            .professorId(existingCourse.getProfessorId())
             .semester(existingCourse.getSemester())
-            .academicYear(existingCourse.getAcademicYear())
-            .capacity(existingCourse.getCapacity())
-            .enrolledStudents(existingCourse.getEnrolledStudents());
+            .year(existingCourse.getYear())
+            .capacity(existingCourse.getMaxEnrollment())
+            .difficulty(DifficultyLevel.valueOf(existingCourse.getDifficultyLevel().name()));
     }
     
     /**
@@ -508,8 +481,7 @@ public class CourseBuilder {
             .name(courseName)
             .description("A comprehensive course covering " + courseName.toLowerCase())
             .credits(3 + random.nextInt(2)) // 3-4 credits
-            .capacity(20 + random.nextInt(31)) // 20-50 capacity
-            .enrolledStudents(random.nextInt(25)); // 0-24 enrolled
+            .capacity(20 + random.nextInt(31)); // 20-50 capacity
     }
     
     /**
@@ -530,11 +502,11 @@ public class CourseBuilder {
             errors.add("Credits must be between 1 and 6");
         }
         
-        if (department == null) {
+        if (ValidationUtil.isEmpty(departmentId)) {
             errors.add("Department is required");
         }
         
-        if (professor == null) {
+        if (ValidationUtil.isEmpty(professorId)) {
             errors.add("Professor is required");
         }
         
@@ -542,20 +514,12 @@ public class CourseBuilder {
             errors.add("Semester is required");
         }
         
-        if (ValidationUtil.isEmpty(academicYear)) {
-            errors.add("Academic year is required");
+        if (year <= 0) {
+            errors.add("Year is required");
         }
         
         if (capacity < 1) {
             errors.add("Capacity must be greater than 0");
-        }
-        
-        if (enrolledStudents < 0) {
-            errors.add("Enrolled students cannot be negative");
-        }
-        
-        if (enrolledStudents > capacity) {
-            errors.add("Enrolled students cannot exceed capacity");
         }
         
         // Validate additional properties
@@ -604,18 +568,10 @@ public class CourseBuilder {
     }
     
     /**
-     * Get current academic year
+     * Get current year
      */
-    private String getCurrentAcademicYear() {
-        Calendar cal = Calendar.getInstance();
-        int year = cal.get(Calendar.YEAR);
-        int month = cal.get(Calendar.MONTH);
-        
-        if (month >= Calendar.AUGUST) {
-            return year + "-" + (year + 1);
-        } else {
-            return (year - 1) + "-" + year;
-        }
+    private int getCurrentYear() {
+        return Calendar.getInstance().get(Calendar.YEAR);
     }
     
     /**
@@ -626,12 +582,13 @@ public class CourseBuilder {
         this.name = null;
         this.description = null;
         this.credits = 3;
-        this.department = null;
-        this.professor = null;
+        this.departmentId = null;
+        this.departmentName = null;
+        this.professorId = null;
+        this.professorName = null;
         this.semester = getCurrentSemester();
-        this.academicYear = getCurrentAcademicYear();
+        this.year = getCurrentYear();
         this.capacity = 30;
-        this.enrolledStudents = 0;
         this.additionalProperties.clear();
         this.validateOnBuild = true;
         return this;
@@ -643,10 +600,10 @@ public class CourseBuilder {
     public boolean isComplete() {
         return !ValidationUtil.isEmpty(courseCode) &&
                !ValidationUtil.isEmpty(name) &&
-               department != null &&
-               professor != null &&
+               !ValidationUtil.isEmpty(departmentId) &&
+               !ValidationUtil.isEmpty(professorId) &&
                !ValidationUtil.isEmpty(semester) &&
-               !ValidationUtil.isEmpty(academicYear);
+               year > 0;
     }
     
     /**
@@ -658,13 +615,20 @@ public class CourseBuilder {
         sb.append("Course Code: ").append(courseCode != null ? courseCode : "Not set").append("\n");
         sb.append("Name: ").append(name != null ? name : "Not set").append("\n");
         sb.append("Credits: ").append(credits).append("\n");
-        sb.append("Department: ").append(department != null ? department.getName() : "Not set").append("\n");
-        sb.append("Professor: ").append(professor != null ? professor.getName() : "Not set").append("\n");
-        sb.append("Semester: ").append(semester).append(" ").append(academicYear).append("\n");
-        sb.append("Capacity: ").append(capacity).append(" (").append(enrolledStudents).append(" enrolled)\n");
+        sb.append("Department: ").append(describe(departmentName, departmentId)).append("\n");
+        sb.append("Professor: ").append(describe(professorName, professorId)).append("\n");
+        sb.append("Semester: ").append(semester).append(" ").append(year).append("\n");
+        sb.append("Capacity: ").append(capacity).append("\n");
         sb.append("Additional Properties: ").append(additionalProperties.size()).append(" items\n");
         sb.append("Complete: ").append(isComplete()).append("\n");
         return sb.toString();
+    }
+    
+    private static String describe(String displayName, String id) {
+        if (displayName != null) {
+            return displayName;
+        }
+        return id != null ? id : "Not set";
     }
     
     /**
@@ -675,8 +639,11 @@ public class CourseBuilder {
             validate();
         }
         
-        return new Course(courseCode, name, description, credits, department, professor,
-                         semester, academicYear, capacity, enrolledStudents);
+        DifficultyLevel difficulty = (DifficultyLevel) additionalProperties.getOrDefault("difficulty", DifficultyLevel.BEGINNER);
+        Course course = new Course(courseCode, courseCode, name, description, credits, departmentId, professorId,
+                                   Course.DifficultyLevel.valueOf(difficulty.name()), semester, year);
+        course.setMaxEnrollment(capacity);
+        return course;
     }
     
     /**
@@ -694,12 +661,11 @@ public class CourseBuilder {
                 .name(variationName)
                 .description(description)
                 .credits(credits)
-                .department(department)
-                .professor(professor)
+                .departmentId(departmentId)
+                .professorId(professorId)
                 .semester(semester)
-                .academicYear(academicYear)
+                .year(year)
                 .capacity(capacity)
-                .enrolledStudents(0) // Start with no enrolled students for variations
                 .properties(additionalProperties)
                 .validateOnBuild(validateOnBuild)
                 .build();

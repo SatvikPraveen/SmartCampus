@@ -9,7 +9,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -22,34 +24,36 @@ public class CsvProcessor {
     
     private static final String CSV_DELIMITER = ",";
     private static final String CSV_QUOTE = "\"";
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
-    private static final SimpleDateFormat DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATETIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
     // CSV Headers for different entities
     public static final String[] STUDENT_HEADERS = {
-        "id", "name", "email", "departmentCode", "enrollmentDate"
+        "id", "firstName", "lastName", "email", "departmentId", "major", "academicYear", "enrollmentDate"
     };
     
     public static final String[] PROFESSOR_HEADERS = {
-        "id", "name", "email", "departmentCode", "specialization", "officeLocation", "yearsOfExperience"
+        "id", "firstName", "lastName", "email", "departmentId", "academicRank",
+        "specialization", "officeLocation", "yearsOfExperience"
     };
     
     public static final String[] COURSE_HEADERS = {
-        "courseCode", "name", "description", "credits", "departmentCode", 
-        "professorId", "semester", "academicYear", "capacity", "enrolledStudents"
+        "courseId", "courseCode", "name", "description", "credits", "departmentId",
+        "professorId", "difficultyLevel", "semester", "year", "capacity"
     };
     
     public static final String[] DEPARTMENT_HEADERS = {
-        "departmentCode", "name", "headOfDepartment", "location", "establishedYear", "studentCount"
+        "departmentId", "departmentCode", "name", "description", "location",
+        "headOfDepartmentId", "establishedYear"
     };
     
     public static final String[] ENROLLMENT_HEADERS = {
-        "enrollmentId", "studentId", "courseCode", "enrollmentDate", "semester", "academicYear"
+        "enrollmentId", "studentId", "courseId", "enrollmentDate", "semester", "year", "status"
     };
     
     public static final String[] GRADE_HEADERS = {
-        "gradeId", "studentId", "courseCode", "numericGrade", "letterGrade", 
-        "semester", "academicYear", "gradedDate", "comments"
+        "gradeId", "enrollmentId", "studentId", "courseId", "assignmentName", "component",
+        "pointsEarned", "pointsPossible", "semester", "year", "dateGraded", "feedback"
     };
     
     /**
@@ -262,17 +266,24 @@ public class CsvProcessor {
             }
             
             String id = values[0].trim();
-            String name = values[1].trim();
-            String email = values[2].trim();
-            String departmentCode = values[3].trim();
-            Date enrollmentDate = DATE_FORMAT.parse(values[4].trim());
+            String firstName = values[1].trim();
+            String lastName = values[2].trim();
+            String email = values[3].trim();
+            String departmentId = values[4].trim();
+            String major = values[5].trim();
+            Student.AcademicYear academicYear = Student.AcademicYear.valueOf(values[6].trim());
+            LocalDate enrollmentDate = LocalDate.parse(values[7].trim(), DATE_FORMAT);
             
-            Department department = departmentMap.get(departmentCode);
-            if (department == null) {
-                System.err.println("Warning: Department not found for code: " + departmentCode);
+            if (!departmentMap.containsKey(departmentId)) {
+                System.err.println("Warning: Department not found for ID: " + departmentId);
             }
             
-            return new Student(id, name, email, department, enrollmentDate);
+            Student student = new Student(id, firstName, lastName, email, null, id, major, academicYear);
+            if (!departmentId.isEmpty()) {
+                student.setDepartmentId(departmentId);
+            }
+            student.setEnrollmentDate(enrollmentDate);
+            return student;
         } catch (Exception e) {
             System.err.println("Error parsing student from CSV line: " + csvLine + " - " + e.getMessage());
             return null;
@@ -287,20 +298,24 @@ public class CsvProcessor {
             }
             
             String id = values[0].trim();
-            String name = values[1].trim();
-            String email = values[2].trim();
-            String departmentCode = values[3].trim();
-            String specialization = values[4].trim();
-            String officeLocation = values[5].trim();
-            int yearsOfExperience = Integer.parseInt(values[6].trim());
+            String firstName = values[1].trim();
+            String lastName = values[2].trim();
+            String email = values[3].trim();
+            String departmentId = values[4].trim();
+            Professor.AcademicRank academicRank = Professor.AcademicRank.valueOf(values[5].trim());
+            String specialization = values[6].trim();
+            String officeLocation = values[7].trim();
+            int yearsOfExperience = Integer.parseInt(values[8].trim());
             
-            Department department = departmentMap.get(departmentCode);
-            if (department == null) {
-                System.err.println("Warning: Department not found for code: " + departmentCode);
+            if (!departmentMap.containsKey(departmentId)) {
+                System.err.println("Warning: Department not found for ID: " + departmentId);
             }
             
-            return new Professor(id, name, email, department, specialization, 
-                               officeLocation, yearsOfExperience);
+            Professor professor = new Professor(id, firstName, lastName, email, null, id,
+                                                departmentId, academicRank, specialization);
+            professor.setOfficeLocation(officeLocation);
+            professor.setYearsOfExperience(yearsOfExperience);
+            return professor;
         } catch (Exception e) {
             System.err.println("Error parsing professor from CSV line: " + csvLine + " - " + e.getMessage());
             return null;
@@ -315,29 +330,30 @@ public class CsvProcessor {
                 return null;
             }
             
-            String courseCode = values[0].trim();
-            String name = values[1].trim();
-            String description = values[2].trim();
-            int credits = Integer.parseInt(values[3].trim());
-            String departmentCode = values[4].trim();
-            String professorId = values[5].trim();
-            String semester = values[6].trim();
-            String academicYear = values[7].trim();
-            int capacity = Integer.parseInt(values[8].trim());
-            int enrolledStudents = Integer.parseInt(values[9].trim());
+            String courseId = values[0].trim();
+            String courseCode = values[1].trim();
+            String name = values[2].trim();
+            String description = values[3].trim();
+            int credits = Integer.parseInt(values[4].trim());
+            String departmentId = values[5].trim();
+            String professorId = values[6].trim();
+            Course.DifficultyLevel difficultyLevel = Course.DifficultyLevel.valueOf(values[7].trim());
+            String semester = values[8].trim();
+            int year = Integer.parseInt(values[9].trim());
+            int capacity = Integer.parseInt(values[10].trim());
             
-            Department department = departmentMap.get(departmentCode);
-            Professor professor = professorMap.get(professorId);
-            
-            if (department == null) {
-                System.err.println("Warning: Department not found for code: " + departmentCode);
+            if (!departmentMap.containsKey(departmentId)) {
+                System.err.println("Warning: Department not found for ID: " + departmentId);
             }
-            if (professor == null) {
+            if (!professorMap.containsKey(professorId)) {
                 System.err.println("Warning: Professor not found for ID: " + professorId);
             }
             
-            return new Course(courseCode, name, description, credits, department, professor,
-                            semester, academicYear, capacity, enrolledStudents);
+            Course course = new Course(courseId, courseCode, name, description, credits, departmentId,
+                                       professorId.isEmpty() ? null : professorId,
+                                       difficultyLevel, semester, year);
+            course.setMaxEnrollment(capacity);
+            return course;
         } catch (Exception e) {
             System.err.println("Error parsing course from CSV line: " + csvLine + " - " + e.getMessage());
             return null;
@@ -351,15 +367,22 @@ public class CsvProcessor {
                 return null;
             }
             
-            String departmentCode = values[0].trim();
-            String name = values[1].trim();
-            String headOfDepartment = values[2].trim();
-            String location = values[3].trim();
-            int establishedYear = Integer.parseInt(values[4].trim());
-            int studentCount = Integer.parseInt(values[5].trim());
+            String departmentId = values[0].trim();
+            String departmentCode = values[1].trim();
+            String name = values[2].trim();
+            String description = values[3].trim();
+            String location = values[4].trim();
+            String headOfDepartmentId = values[5].trim();
+            String establishedYear = values[6].trim();
             
-            return new Department(departmentCode, name, headOfDepartment, 
-                                location, establishedYear, studentCount);
+            Department department = new Department(departmentId, departmentCode, name, description, location);
+            if (!headOfDepartmentId.isEmpty()) {
+                department.setHeadOfDepartmentId(headOfDepartmentId);
+            }
+            if (!establishedYear.isEmpty()) {
+                department.setEstablishedYear(establishedYear);
+            }
+            return department;
         } catch (Exception e) {
             System.err.println("Error parsing department from CSV line: " + csvLine + " - " + e.getMessage());
             return null;
@@ -374,27 +397,27 @@ public class CsvProcessor {
                 return null;
             }
             
-            Long enrollmentId = Long.parseLong(values[0].trim());
+            String enrollmentId = values[0].trim();
             String studentId = values[1].trim();
-            String courseCode = values[2].trim();
-            Date enrollmentDate = DATE_FORMAT.parse(values[3].trim());
+            String courseId = values[2].trim();
+            LocalDate enrollmentDate = LocalDate.parse(values[3].trim(), DATE_FORMAT);
             String semester = values[4].trim();
-            String academicYear = values[5].trim();
+            int year = Integer.parseInt(values[5].trim());
+            Enrollment.EnrollmentStatus status = Enrollment.EnrollmentStatus.valueOf(values[6].trim());
             
-            Student student = studentMap.get(studentId);
-            Course course = courseMap.get(courseCode);
-            
-            if (student == null) {
+            if (!studentMap.containsKey(studentId)) {
                 System.err.println("Warning: Student not found for ID: " + studentId);
                 return null;
             }
-            if (course == null) {
-                System.err.println("Warning: Course not found for code: " + courseCode);
+            if (!courseMap.containsKey(courseId)) {
+                System.err.println("Warning: Course not found for ID: " + courseId);
                 return null;
             }
             
-            return new Enrollment(enrollmentId, student, course, enrollmentDate, 
-                                semester, academicYear);
+            Enrollment enrollment = new Enrollment(enrollmentId, studentId, courseId, semester, year);
+            enrollment.setEnrollmentDate(enrollmentDate.atStartOfDay());
+            enrollment.setStatus(status);
+            return enrollment;
         } catch (Exception e) {
             System.err.println("Error parsing enrollment from CSV line: " + csvLine + " - " + e.getMessage());
             return null;
@@ -405,34 +428,42 @@ public class CsvProcessor {
                                          Map<String, Course> courseMap) {
         try {
             String[] values = parseCsvLine(csvLine);
-            if (values.length < GRADE_HEADERS.length) {
+            if (values.length < GRADE_HEADERS.length - 1) {
                 return null;
             }
             
-            Long gradeId = Long.parseLong(values[0].trim());
-            String studentId = values[1].trim();
-            String courseCode = values[2].trim();
-            double numericGrade = Double.parseDouble(values[3].trim());
-            String letterGrade = values[4].trim();
-            String semester = values[5].trim();
-            String academicYear = values[6].trim();
-            Date gradedDate = DATE_FORMAT.parse(values[7].trim());
-            String comments = values.length > 8 ? values[8].trim() : "";
+            String gradeId = values[0].trim();
+            String enrollmentId = values[1].trim();
+            String studentId = values[2].trim();
+            String courseId = values[3].trim();
+            String assignmentName = values[4].trim();
+            Grade.GradeComponent component = Grade.GradeComponent.valueOf(values[5].trim());
+            double pointsEarned = Double.parseDouble(values[6].trim());
+            double pointsPossible = Double.parseDouble(values[7].trim());
+            String semester = values[8].trim();
+            int year = Integer.parseInt(values[9].trim());
+            String dateGraded = values[10].trim();
+            String feedback = values.length > 11 ? values[11].trim() : "";
             
-            Student student = studentMap.get(studentId);
-            Course course = courseMap.get(courseCode);
-            
-            if (student == null) {
+            if (!studentMap.containsKey(studentId)) {
                 System.err.println("Warning: Student not found for ID: " + studentId);
                 return null;
             }
-            if (course == null) {
-                System.err.println("Warning: Course not found for code: " + courseCode);
+            if (!courseMap.containsKey(courseId)) {
+                System.err.println("Warning: Course not found for ID: " + courseId);
                 return null;
             }
             
-            return new Grade(gradeId, student, course, numericGrade, letterGrade,
-                           semester, academicYear, gradedDate, comments);
+            Grade grade = new Grade(gradeId, enrollmentId, studentId, courseId, assignmentName, component);
+            grade.setPointsPossible(pointsPossible);
+            grade.setPointsEarned(pointsEarned);
+            grade.setSemester(semester);
+            grade.setYear(year);
+            if (!dateGraded.isEmpty()) {
+                grade.setDateGraded(LocalDateTime.parse(dateGraded, DATETIME_FORMAT));
+            }
+            grade.setFeedback(feedback);
+            return grade;
         } catch (Exception e) {
             System.err.println("Error parsing grade from CSV line: " + csvLine + " - " + e.getMessage());
             return null;
@@ -443,22 +474,25 @@ public class CsvProcessor {
     
     private static String formatStudentToCsv(Student student) {
         return String.join(CSV_DELIMITER,
-            escapeCsvValue(student.getId()),
-            escapeCsvValue(student.getName()),
+            escapeCsvValue(student.getStudentId()),
+            escapeCsvValue(student.getFirstName()),
+            escapeCsvValue(student.getLastName()),
             escapeCsvValue(student.getEmail()),
-            escapeCsvValue(student.getDepartment() != null ? 
-                          student.getDepartment().getDepartmentCode() : ""),
-            DATE_FORMAT.format(student.getEnrollmentDate())
+            escapeCsvValue(student.getDepartmentId()),
+            escapeCsvValue(student.getMajor()),
+            student.getAcademicYear() != null ? student.getAcademicYear().name() : "",
+            student.getEnrollmentDate() != null ? DATE_FORMAT.format(student.getEnrollmentDate()) : ""
         );
     }
     
     private static String formatProfessorToCsv(Professor professor) {
         return String.join(CSV_DELIMITER,
-            escapeCsvValue(professor.getId()),
-            escapeCsvValue(professor.getName()),
+            escapeCsvValue(professor.getProfessorId()),
+            escapeCsvValue(professor.getFirstName()),
+            escapeCsvValue(professor.getLastName()),
             escapeCsvValue(professor.getEmail()),
-            escapeCsvValue(professor.getDepartment() != null ? 
-                          professor.getDepartment().getDepartmentCode() : ""),
+            escapeCsvValue(professor.getDepartmentId()),
+            professor.getAcademicRank() != null ? professor.getAcademicRank().name() : "",
             escapeCsvValue(professor.getSpecialization()),
             escapeCsvValue(professor.getOfficeLocation()),
             String.valueOf(professor.getYearsOfExperience())
@@ -467,54 +501,58 @@ public class CsvProcessor {
     
     private static String formatCourseToCsv(Course course) {
         return String.join(CSV_DELIMITER,
+            escapeCsvValue(course.getCourseId()),
             escapeCsvValue(course.getCourseCode()),
-            escapeCsvValue(course.getName()),
+            escapeCsvValue(course.getCourseName()),
             escapeCsvValue(course.getDescription()),
             String.valueOf(course.getCredits()),
-            escapeCsvValue(course.getDepartment() != null ? 
-                          course.getDepartment().getDepartmentCode() : ""),
-            escapeCsvValue(course.getProfessor() != null ? 
-                          course.getProfessor().getId() : ""),
+            escapeCsvValue(course.getDepartmentId()),
+            escapeCsvValue(course.getProfessorId()),
+            course.getDifficultyLevel() != null ? course.getDifficultyLevel().name() : "",
             escapeCsvValue(course.getSemester()),
-            escapeCsvValue(course.getAcademicYear()),
-            String.valueOf(course.getCapacity()),
-            String.valueOf(course.getEnrolledStudents())
+            String.valueOf(course.getYear()),
+            String.valueOf(course.getMaxEnrollment())
         );
     }
     
     private static String formatDepartmentToCsv(Department department) {
         return String.join(CSV_DELIMITER,
+            escapeCsvValue(department.getDepartmentId()),
             escapeCsvValue(department.getDepartmentCode()),
-            escapeCsvValue(department.getName()),
-            escapeCsvValue(department.getHeadOfDepartment()),
+            escapeCsvValue(department.getDepartmentName()),
+            escapeCsvValue(department.getDescription()),
             escapeCsvValue(department.getLocation()),
-            String.valueOf(department.getEstablishedYear()),
-            String.valueOf(department.getStudentCount())
+            escapeCsvValue(department.getHeadOfDepartmentId()),
+            escapeCsvValue(department.getEstablishedYear())
         );
     }
     
     private static String formatEnrollmentToCsv(Enrollment enrollment) {
         return String.join(CSV_DELIMITER,
-            String.valueOf(enrollment.getEnrollmentId()),
-            escapeCsvValue(enrollment.getStudent().getId()),
-            escapeCsvValue(enrollment.getCourse().getCourseCode()),
-            DATE_FORMAT.format(enrollment.getEnrollmentDate()),
+            escapeCsvValue(enrollment.getEnrollmentId()),
+            escapeCsvValue(enrollment.getStudentId()),
+            escapeCsvValue(enrollment.getCourseId()),
+            enrollment.getEnrollmentDate() != null ? DATE_FORMAT.format(enrollment.getEnrollmentDate()) : "",
             escapeCsvValue(enrollment.getSemester()),
-            escapeCsvValue(enrollment.getAcademicYear())
+            String.valueOf(enrollment.getYear()),
+            enrollment.getStatus() != null ? enrollment.getStatus().name() : ""
         );
     }
     
     private static String formatGradeToCsv(Grade grade) {
         return String.join(CSV_DELIMITER,
-            String.valueOf(grade.getGradeId()),
-            escapeCsvValue(grade.getStudent().getId()),
-            escapeCsvValue(grade.getCourse().getCourseCode()),
-            String.valueOf(grade.getNumericGrade()),
-            escapeCsvValue(grade.getLetterGrade()),
+            escapeCsvValue(grade.getGradeId()),
+            escapeCsvValue(grade.getEnrollmentId()),
+            escapeCsvValue(grade.getStudentId()),
+            escapeCsvValue(grade.getCourseId()),
+            escapeCsvValue(grade.getAssignmentName()),
+            grade.getComponent() != null ? grade.getComponent().name() : "",
+            String.valueOf(grade.getPointsEarned()),
+            String.valueOf(grade.getPointsPossible()),
             escapeCsvValue(grade.getSemester()),
-            escapeCsvValue(grade.getAcademicYear()),
-            DATE_FORMAT.format(grade.getGradedDate()),
-            escapeCsvValue(grade.getComments() != null ? grade.getComments() : "")
+            String.valueOf(grade.getYear()),
+            grade.getDateGraded() != null ? DATETIME_FORMAT.format(grade.getDateGraded()) : "",
+            escapeCsvValue(grade.getFeedback() != null ? grade.getFeedback() : "")
         );
     }
     

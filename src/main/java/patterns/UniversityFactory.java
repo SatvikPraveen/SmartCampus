@@ -3,6 +3,7 @@
 package patterns;
 
 import models.*;
+import java.time.LocalDate;
 import java.util.*;
 
 /**
@@ -18,52 +19,47 @@ public class UniversityFactory {
          * Create a public university
          */
         public static University createPublicUniversity(String name, String location) {
-            return new University.Builder()
-                .name(name)
-                .location(location)
-                .type(UniversityType.PUBLIC)
-                .accreditation("State Accredited")
-                .establishedYear(1950 + new Random().nextInt(50))
-                .build();
+            return buildUniversity(name, location, University.UniversityType.PUBLIC, 1950 + new Random().nextInt(50));
         }
         
         /**
          * Create a private university
          */
         public static University createPrivateUniversity(String name, String location) {
-            return new University.Builder()
-                .name(name)
-                .location(location)
-                .type(UniversityType.PRIVATE)
-                .accreditation("Private Accredited")
-                .establishedYear(1900 + new Random().nextInt(100))
-                .build();
+            return buildUniversity(name, location, University.UniversityType.PRIVATE, 1900 + new Random().nextInt(100));
         }
         
         /**
          * Create a community college
          */
         public static University createCommunityCollege(String name, String location) {
-            return new University.Builder()
-                .name(name)
-                .location(location)
-                .type(UniversityType.COMMUNITY_COLLEGE)
-                .accreditation("Community College Accredited")
-                .establishedYear(1960 + new Random().nextInt(40))
-                .build();
+            return buildUniversity(name, location, University.UniversityType.COMMUNITY_COLLEGE, 1960 + new Random().nextInt(40));
         }
         
         /**
          * Create an online university
          */
         public static University createOnlineUniversity(String name) {
-            return new University.Builder()
-                .name(name)
-                .location("Online")
-                .type(UniversityType.ONLINE)
-                .accreditation("Online Education Accredited")
-                .establishedYear(1990 + new Random().nextInt(30))
-                .build();
+            return buildUniversity(name, "Online", University.UniversityType.ONLINE, 1990 + new Random().nextInt(30));
+        }
+        
+        private static University buildUniversity(String name, String location,
+                                                  University.UniversityType type, int establishedYear) {
+            University university = University.createUniversity(name, abbreviate(name), type);
+            university.setCity(location);
+            university.setAccreditationStatus(University.AccreditationStatus.FULLY_ACCREDITED);
+            university.setFoundedDate(LocalDate.of(establishedYear, 1, 1));
+            return university;
+        }
+        
+        private static String abbreviate(String name) {
+            StringBuilder shortName = new StringBuilder();
+            for (String word : name.trim().split("\\s+")) {
+                if (!word.isEmpty() && Character.isUpperCase(word.charAt(0))) {
+                    shortName.append(word.charAt(0));
+                }
+            }
+            return shortName.length() > 0 ? shortName.toString() : name.trim();
         }
     }
     
@@ -74,70 +70,42 @@ public class UniversityFactory {
          * Create Computer Science department
          */
         public static Department createComputerScienceDepartment() {
-            return new Department(
-                "CS",
-                "Computer Science",
-                "Dr. Alan Turing",
-                "Technology Building, Floor 3",
-                1970,
-                250
-            );
+            return buildDepartment("CS", "Computer Science", "Technology Building, Floor 3", 1970);
         }
         
         /**
          * Create Mathematics department
          */
         public static Department createMathematicsDepartment() {
-            return new Department(
-                "MATH",
-                "Mathematics",
-                "Dr. Emmy Noether",
-                "Science Building, Floor 2",
-                1965,
-                180
-            );
+            return buildDepartment("MATH", "Mathematics", "Science Building, Floor 2", 1965);
         }
         
         /**
          * Create Engineering department
          */
         public static Department createEngineeringDepartment() {
-            return new Department(
-                "ENG",
-                "Engineering",
-                "Dr. Nikola Tesla",
-                "Engineering Complex, Floor 1",
-                1955,
-                300
-            );
+            return buildDepartment("ENG", "Engineering", "Engineering Complex, Floor 1", 1955);
         }
         
         /**
          * Create Business department
          */
         public static Department createBusinessDepartment() {
-            return new Department(
-                "BUS",
-                "Business Administration",
-                "Dr. Peter Drucker",
-                "Business Center, Floor 4",
-                1960,
-                400
-            );
+            return buildDepartment("BUS", "Business Administration", "Business Center, Floor 4", 1960);
         }
         
         /**
          * Create Arts department
          */
         public static Department createArtsDepartment() {
-            return new Department(
-                "ART",
-                "Fine Arts",
-                "Dr. Maya Angelou",
-                "Arts Building, Floor 1",
-                1950,
-                150
-            );
+            return buildDepartment("ART", "Fine Arts", "Arts Building, Floor 1", 1950);
+        }
+        
+        private static Department buildDepartment(String code, String name, String location, int establishedYear) {
+            Department department = new Department(Department.generateDepartmentId(code), code, name,
+                                                   "Department of " + name, location);
+            department.setEstablishedYear(String.valueOf(establishedYear));
+            return department;
         }
         
         /**
@@ -196,7 +164,10 @@ public class UniversityFactory {
             String email = firstName.toLowerCase() + "." + lastName.toLowerCase() + "@university.edu";
             String id = "STU" + String.format("%06d", random.nextInt(999999));
             
-            return new Student(id, firstName + " " + lastName, email, department, new Date());
+            Student student = new Student(id, firstName, lastName, email, null, id,
+                                          department.getDepartmentName(), Student.AcademicYear.FRESHMAN);
+            student.setDepartmentId(department.getDepartmentId());
+            return student;
         }
         
         /**
@@ -211,8 +182,12 @@ public class UniversityFactory {
             String office = department.getLocation() + ", Room " + (100 + random.nextInt(300));
             int experience = 1 + random.nextInt(30);
             
-            return new Professor(id, "Dr. " + firstName + " " + lastName, email, 
-                               department, specialization, office, experience);
+            Professor professor = new Professor(id, firstName, lastName, email, null, id,
+                                                department.getDepartmentId(), Professor.AcademicRank.ASSISTANT,
+                                                specialization);
+            professor.setOfficeLocation(office);
+            professor.setYearsOfExperience(experience);
+            return professor;
         }
         
         /**
@@ -220,7 +195,39 @@ public class UniversityFactory {
          */
         public static Admin createAdmin(String name, String email, AdminRole role) {
             String id = "ADM" + String.format("%06d", random.nextInt(999999));
-            return new Admin(id, name, email, role);
+            String trimmed = name.trim();
+            int split = trimmed.lastIndexOf(' ');
+            String firstName = split > 0 ? trimmed.substring(0, split) : trimmed;
+            String lastName = split > 0 ? trimmed.substring(split + 1) : trimmed;
+            return new Admin(id, firstName, lastName, email, null, id,
+                             getAdminLevel(role), getAdminDepartment(role), trimmed);
+        }
+        
+        private static Admin.AdminLevel getAdminLevel(AdminRole role) {
+            switch (role) {
+                case SYSTEM_ADMIN:
+                    return Admin.AdminLevel.SYSTEM_ADMIN;
+                case REGISTRAR:
+                case ACADEMIC_AFFAIRS:
+                    return Admin.AdminLevel.SENIOR_ADMIN;
+                default:
+                    return Admin.AdminLevel.JUNIOR_ADMIN;
+            }
+        }
+        
+        private static Admin.Department getAdminDepartment(AdminRole role) {
+            switch (role) {
+                case REGISTRAR:
+                    return Admin.Department.REGISTRAR;
+                case ACADEMIC_AFFAIRS:
+                    return Admin.Department.ACADEMIC_AFFAIRS;
+                case STUDENT_SERVICES:
+                    return Admin.Department.STUDENT_SERVICES;
+                case SYSTEM_ADMIN:
+                case IT_SUPPORT:
+                default:
+                    return Admin.Department.IT_SERVICES;
+            }
         }
         
         /**
@@ -271,8 +278,8 @@ public class UniversityFactory {
             String name = "Introduction to " + subject;
             String description = "An introductory course covering the fundamentals of " + subject.toLowerCase();
             
-            return new Course(courseCode, name, description, 3, department, professor,
-                            getCurrentSemester(), getCurrentAcademicYear(), 30, 0);
+            return buildCourse(courseCode, name, description, 3, department, professor,
+                               Course.DifficultyLevel.BEGINNER, 30);
         }
         
         /**
@@ -283,8 +290,8 @@ public class UniversityFactory {
             String name = "Advanced " + subject;
             String description = "An advanced course in " + subject.toLowerCase() + " for upper-level students";
             
-            return new Course(courseCode, name, description, 4, department, professor,
-                            getCurrentSemester(), getCurrentAcademicYear(), 20, 0);
+            return buildCourse(courseCode, name, description, 4, department, professor,
+                               Course.DifficultyLevel.ADVANCED, 20);
         }
         
         /**
@@ -295,8 +302,8 @@ public class UniversityFactory {
             String name = "Graduate " + subject;
             String description = "A graduate-level course in " + subject.toLowerCase();
             
-            return new Course(courseCode, name, description, 3, department, professor,
-                            getCurrentSemester(), getCurrentAcademicYear(), 15, 0);
+            return buildCourse(courseCode, name, description, 3, department, professor,
+                               Course.DifficultyLevel.EXPERT, 15);
         }
         
         /**
@@ -307,8 +314,8 @@ public class UniversityFactory {
             String name = subject + " Laboratory";
             String description = "Hands-on laboratory experience in " + subject.toLowerCase();
             
-            return new Course(courseCode, name, description, 1, department, professor,
-                            getCurrentSemester(), getCurrentAcademicYear(), 12, 0);
+            return buildCourse(courseCode, name, description, 1, department, professor,
+                               Course.DifficultyLevel.INTERMEDIATE, 12);
         }
         
         /**
@@ -319,8 +326,8 @@ public class UniversityFactory {
             String name = "Seminar in " + topic;
             String description = "A seminar course focusing on current topics in " + topic.toLowerCase();
             
-            return new Course(courseCode, name, description, 2, department, professor,
-                            getCurrentSemester(), getCurrentAcademicYear(), 10, 0);
+            return buildCourse(courseCode, name, description, 2, department, professor,
+                               Course.DifficultyLevel.ADVANCED, 10);
         }
         
         /**
@@ -434,6 +441,16 @@ public class UniversityFactory {
             return courses;
         }
         
+        private static Course buildCourse(String courseCode, String name, String description, int credits,
+                                          Department department, Professor professor,
+                                          Course.DifficultyLevel difficultyLevel, int maxEnrollment) {
+            Course course = new Course(courseCode, courseCode, name, description, credits,
+                                       department.getDepartmentId(), professor.getProfessorId(),
+                                       difficultyLevel, getCurrentSemester(), getCurrentYear());
+            course.setMaxEnrollment(maxEnrollment);
+            return course;
+        }
+        
         private static String getCurrentSemester() {
             Calendar cal = Calendar.getInstance();
             int month = cal.get(Calendar.MONTH);
@@ -447,16 +464,8 @@ public class UniversityFactory {
             }
         }
         
-        private static String getCurrentAcademicYear() {
-            Calendar cal = Calendar.getInstance();
-            int year = cal.get(Calendar.YEAR);
-            int month = cal.get(Calendar.MONTH);
-            
-            if (month >= Calendar.AUGUST) {
-                return year + "-" + (year + 1);
-            } else {
-                return (year - 1) + "-" + year;
-            }
+        private static int getCurrentYear() {
+            return Calendar.getInstance().get(Calendar.YEAR);
         }
     }
     

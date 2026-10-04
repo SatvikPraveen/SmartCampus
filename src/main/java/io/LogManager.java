@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.*;
+import java.util.logging.Formatter;
 
 /**
  * Comprehensive logging framework for the SmartCampus system
@@ -625,7 +626,7 @@ public class LogManager {
      * Create log report
      */
     public LogReport generateLogReport(LocalDateTime startDate, LocalDateTime endDate) {
-        Map<Level, Integer> levelCounts = new EnumMap<>(Level.class);
+        Map<Level, Integer> levelCounts = new HashMap<>();
         Map<String, Integer> loggerCounts = new HashMap<>();
         List<String> errorMessages = new ArrayList<>();
         
