@@ -22,7 +22,8 @@ documented project, and adds a course-timetabling research engine.
   Actuator health probes
 - Benchmark results and methodology in `docs/research/`, architecture decision records in
   `docs/adr/`, `CITATION.cff`, `SECURITY.md`
-- Maven wrapper, layered non-root Docker image, CI/CodeQL/release workflow drafts,
+- Maven wrapper, layered non-root Docker image, CI (build, tests, coverage gate, benchmark smoke run,
+  Docker smoke test), CodeQL and release workflows,
   Dependabot, issue and PR templates
 - Test suite of 1,980 tests covering the scheduling engine, the API and the domain packages
   (models, enums, services, utils, cache, security, repositories, functional), with a JaCoCo
