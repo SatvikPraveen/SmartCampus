@@ -278,6 +278,11 @@ public interface Searchable<T> {
         private final SortOrder sortOrder;
         
         public SearchResult(List<T> results, int page, int pageSize, long totalElements) {
+            this(results, page, pageSize, totalElements, null, null);
+        }
+        
+        public SearchResult(List<T> results, int page, int pageSize, long totalElements, 
+                           String sortBy, SortOrder sortOrder) {
             this.results = results;
             this.page = page;
             this.pageSize = pageSize;
@@ -285,13 +290,6 @@ public interface Searchable<T> {
             this.totalPages = (int) Math.ceil((double) totalElements / pageSize);
             this.hasNext = page < totalPages - 1;
             this.hasPrevious = page > 0;
-            this.sortBy = null;
-            this.sortOrder = null;
-        }
-        
-        public SearchResult(List<T> results, int page, int pageSize, long totalElements, 
-                           String sortBy, SortOrder sortOrder) {
-            this(results, page, pageSize, totalElements);
             this.sortBy = sortBy;
             this.sortOrder = sortOrder;
         }

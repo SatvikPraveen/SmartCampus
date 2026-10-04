@@ -183,7 +183,7 @@ public interface EventListener<T> {
      * 
      * @param event The event that timed out
      */
-    default void onEventTimeout(Event<T> event) {
+    default void onEventTimeout(Event<T> event) throws EventHandlingException {
         throw new EventHandlingException("Event handling timed out for event: " + event.getEventType());
     }
     

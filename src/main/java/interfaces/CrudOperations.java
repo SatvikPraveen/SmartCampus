@@ -173,7 +173,7 @@ public interface CrudOperations<T, ID> {
      * @return true if entity was deleted, false if not found
      * @throws CrudException if delete operation fails
      */
-    boolean delete(T entity) throws CrudException;
+    boolean deleteEntity(T entity) throws CrudException;
     
     /**
      * Delete multiple entities by IDs.
