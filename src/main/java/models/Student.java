@@ -117,6 +117,9 @@ public class Student extends User {
     }
     
     public void completeCourse(String courseId, double grade) {
+        if (grade < 0.0 || grade > 4.0) {
+            throw new IllegalArgumentException("Grade points must be between 0.0 and 4.0");
+        }
         if (enrolledCourseIds.contains(courseId)) {
             enrolledCourseIds.remove(courseId);
             completedCourseIds.add(courseId);
@@ -146,11 +149,15 @@ public class Student extends User {
     }
     
     public void promoteAcademicYear() {
+        // Promote as far as the credit total allows (e.g. a transfer student
+        // credited with 95 credits goes straight from FRESHMAN to SENIOR).
         if (totalCredits >= 30 && academicYear == AcademicYear.FRESHMAN) {
             academicYear = AcademicYear.SOPHOMORE;
-        } else if (totalCredits >= 60 && academicYear == AcademicYear.SOPHOMORE) {
+        }
+        if (totalCredits >= 60 && academicYear == AcademicYear.SOPHOMORE) {
             academicYear = AcademicYear.JUNIOR;
-        } else if (totalCredits >= 90 && academicYear == AcademicYear.JUNIOR) {
+        }
+        if (totalCredits >= 90 && academicYear == AcademicYear.JUNIOR) {
             academicYear = AcademicYear.SENIOR;
         }
     }

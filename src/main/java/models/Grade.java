@@ -307,7 +307,8 @@ public class Grade {
      * Get weighted possible points.
      */
     public double getWeightedPossiblePoints() {
-        if (!isDropped && status != GradeStatus.EXCUSED) {
+        // Extra credit adds to earned points only; it must not raise the denominator
+        if (!isDropped && !isExtraCredit && status != GradeStatus.EXCUSED) {
             return pointsPossible * weight;
         }
         return 0.0;

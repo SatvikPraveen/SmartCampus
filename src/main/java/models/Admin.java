@@ -107,6 +107,7 @@ public class Admin extends User {
         this.permissions = new ArrayList<>();
         this.managedDepartments = new ArrayList<>();
         this.hireDate = LocalDateTime.now();
+        this.vacationDays = 20; // Same default as the other constructors
         setDefaultPermissions();
     }
     
@@ -170,7 +171,16 @@ public class Admin extends User {
      */
     private void setDefaultPermissions() {
         permissions.clear();
-        
+        // Reset capability flags so a level change (including a demotion)
+        // never leaves capabilities from the previous level behind
+        hasSystemAccess = false;
+        canViewReports = false;
+        canModifyData = false;
+        canManageUsers = false;
+        if (adminLevel == null) {
+            return;
+        }
+
         switch (adminLevel) {
             case JUNIOR_ADMIN:
                 hasSystemAccess = true;
@@ -439,7 +449,9 @@ public class Admin extends User {
     @Override
     public String toString() {
         return String.format("Admin{adminId='%s', name='%s', level='%s', dept='%s', title='%s', active=%s}", 
-            adminId, getFullName(), adminLevel.getDisplayName(), department.getDisplayName(), 
+            adminId, getFullName(),
+            adminLevel != null ? adminLevel.getDisplayName() : null,
+            department != null ? department.getDisplayName() : null,
             jobTitle, isActive());
     }
 }

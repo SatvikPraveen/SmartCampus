@@ -192,11 +192,13 @@ public class Course {
         boolean removed = enrolledStudentIds.remove(studentId);
         
         if (removed) {
-            // If there's a waitlist, automatically enroll the first student
-            if (!waitlistedStudentIds.isEmpty()) {
+            // If there's a waitlist, automatically enroll the first student,
+            // but never beyond capacity (maxEnrollment may have been lowered)
+            if (!waitlistedStudentIds.isEmpty() && enrolledStudentIds.size() < maxEnrollment) {
                 String nextStudent = waitlistedStudentIds.remove(0);
                 enrolledStudentIds.add(nextStudent);
-            } else if (status == CourseStatus.CLOSED && enrolledStudentIds.size() < maxEnrollment) {
+            } else if (waitlistedStudentIds.isEmpty() && status == CourseStatus.CLOSED
+                       && enrolledStudentIds.size() < maxEnrollment) {
                 status = CourseStatus.OPEN; // Reopen enrollment
             }
         }

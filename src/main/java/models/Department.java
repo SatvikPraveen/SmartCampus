@@ -293,13 +293,11 @@ public class Department {
     private void updateStatistics() {
         totalEnrollment = studentIds.size();
         
-        if (courseIds.size() > 0) {
-            averageClassSize = (double) totalEnrollment / courseIds.size();
-        }
-        
-        if (professorIds.size() > 0) {
-            studentToFacultyRatio = (double) totalEnrollment / professorIds.size();
-        }
+        // Reset to 0 when the divisor set becomes empty instead of keeping a stale value
+        averageClassSize = courseIds.isEmpty()
+            ? 0.0 : (double) totalEnrollment / courseIds.size();
+        studentToFacultyRatio = professorIds.isEmpty()
+            ? 0.0 : (double) totalEnrollment / professorIds.size();
     }
     
     public void calculateDetailedStatistics() {

@@ -222,12 +222,9 @@ public class Enrollment {
     public boolean assignNumericGrade(double numericGrade) {
         if (canBeGraded() && numericGrade >= 0 && numericGrade <= 100) {
             this.numericGrade = numericGrade;
-            this.lastModified = LocalDateTime.now();
-            
-            // Auto-assign letter grade based on numeric grade
-            this.grade = convertNumericToLetterGrade(numericGrade);
-            
-            return true;
+            // Auto-assign letter grade based on numeric grade; assignGrade also
+            // moves the enrollment to COMPLETED/FAILED like a letter grade would
+            return assignGrade(convertNumericToLetterGrade(numericGrade));
         }
         return false;
     }

@@ -238,6 +238,7 @@ public class University {
         if (studentId != null && !studentId.trim().isEmpty() && !studentIds.contains(studentId)) {
             studentIds.add(studentId);
             totalStudents = studentIds.size();
+            calculateFacultyToStudentRatio();
             updateLastModified();
             return true;
         }
@@ -250,6 +251,7 @@ public class University {
     public boolean removeStudent(String studentId) {
         if (studentIds.remove(studentId)) {
             totalStudents = studentIds.size();
+            calculateFacultyToStudentRatio();
             updateLastModified();
             return true;
         }
@@ -962,6 +964,6 @@ public class University {
     @Override
     public String toString() {
         return String.format("University{id='%s', name='%s', type='%s', students=%d, professors=%d, departments=%d, active=%s}", 
-            universityId, name, type.getDisplayName(), totalStudents, totalProfessors, totalDepartments, isActive);
+            universityId, name, type != null ? type.getDisplayName() : null, totalStudents, totalProfessors, totalDepartments, isActive);
     }
 }
