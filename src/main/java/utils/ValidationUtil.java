@@ -336,11 +336,12 @@ public final class ValidationUtil {
         }
         
         Pattern academicYearPattern = Pattern.compile("^\\d{4}-\\d{4}$");
-        if (!academicYearPattern.matcher(academicYear.trim()).matches()) {
+        String trimmed = academicYear.trim();
+        if (!academicYearPattern.matcher(trimmed).matches()) {
             return false;
         }
         
-        String[] years = academicYear.split("-");
+        String[] years = trimmed.split("-");
         try {
             int startYear = Integer.parseInt(years[0]);
             int endYear = Integer.parseInt(years[1]);

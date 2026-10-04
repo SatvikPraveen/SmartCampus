@@ -366,7 +366,7 @@ public final class CollectionUtil {
      * Reverses collection
      */
     public static <T> List<T> reverse(Collection<T> collection) {
-        List<T> list = toList(collection);
+        List<T> list = new ArrayList<>(defaultIfNull(collection)); // never mutate the caller's list
         Collections.reverse(list);
         return list;
     }
@@ -391,7 +391,7 @@ public final class CollectionUtil {
      * Shuffles collection
      */
     public static <T> List<T> shuffle(Collection<T> collection) {
-        List<T> list = toList(collection);
+        List<T> list = new ArrayList<>(defaultIfNull(collection)); // never mutate the caller's list
         Collections.shuffle(list);
         return list;
     }
@@ -400,7 +400,7 @@ public final class CollectionUtil {
      * Shuffles collection with random
      */
     public static <T> List<T> shuffle(Collection<T> collection, Random random) {
-        List<T> list = toList(collection);
+        List<T> list = new ArrayList<>(defaultIfNull(collection)); // never mutate the caller's list
         Collections.shuffle(list, random);
         return list;
     }
@@ -417,7 +417,7 @@ public final class CollectionUtil {
         List<List<T>> partitions = new ArrayList<>();
         
         for (int i = 0; i < list.size(); i += size) {
-            partitions.add(list.subList(i, Math.min(i + size, list.size())));
+            partitions.add(new ArrayList<>(list.subList(i, Math.min(i + size, list.size()))));
         }
         
         return partitions;
@@ -501,7 +501,7 @@ public final class CollectionUtil {
      */
     public static <T> Optional<T> first(Collection<T> collection) {
         if (isEmpty(collection)) return Optional.empty();
-        return Optional.of(collection.iterator().next());
+        return Optional.ofNullable(collection.iterator().next());
     }
     
     /**
@@ -519,7 +519,7 @@ public final class CollectionUtil {
         
         if (collection instanceof List) {
             List<T> list = (List<T>) collection;
-            return Optional.of(list.get(list.size() - 1));
+            return Optional.ofNullable(list.get(list.size() - 1));
         }
         
         T last = null;

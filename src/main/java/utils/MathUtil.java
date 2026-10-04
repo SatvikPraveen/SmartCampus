@@ -135,8 +135,8 @@ public final class MathUtil {
     public static double truncate(double value, int decimalPlaces) {
         if (decimalPlaces < 0) return value;
         
-        double multiplier = Math.pow(10, decimalPlaces);
-        return Math.floor(value * multiplier) / multiplier;
+        // Decimal arithmetic avoids binary artefacts (0.29 * 100 = 28.999...) and truncates toward zero
+        return BigDecimal.valueOf(value).setScale(decimalPlaces, RoundingMode.DOWN).doubleValue();
     }
     
     /**
@@ -214,12 +214,12 @@ public final class MathUtil {
     public static double mean(Collection<? extends Number> values) {
         if (values == null || values.isEmpty()) return 0.0;
         
-        double sum = values.stream()
+        // Null elements are ignored, so they must not count towards the divisor either
+        return values.stream()
             .filter(Objects::nonNull)
             .mapToDouble(Number::doubleValue)
-            .sum();
-            
-        return sum / values.size();
+            .average()
+            .orElse(0.0);
     }
     
     /**
@@ -300,7 +300,9 @@ public final class MathUtil {
             .map(v -> Math.pow(v - mean, 2))
             .sum();
             
-        return sumOfSquares / (values.size() - 1); // Sample variance
+        long n = values.stream().filter(Objects::nonNull).count();
+        if (n < 2) return 0.0;
+        return sumOfSquares / (n - 1); // Sample variance
     }
     
     /**
@@ -316,7 +318,9 @@ public final class MathUtil {
             .map(v -> Math.pow(v - mean, 2))
             .sum();
             
-        return sumOfSquares / values.size();
+        long n = values.stream().filter(Objects::nonNull).count();
+        if (n == 0) return 0.0;
+        return sumOfSquares / n;
     }
     
     /**
@@ -748,7 +752,8 @@ public final class MathUtil {
      */
     public static int lcm(int a, int b) {
         if (a == 0 || b == 0) return 0;
-        return Math.abs(a * b) / gcd(a, b);
+        // Divide before multiplying so that the intermediate product cannot overflow
+        return Math.abs(a / gcd(a, b) * b);
     }
     
     /**
@@ -770,6 +775,7 @@ public final class MathUtil {
      */
     public static List<Integer> primeFactors(int n) {
         List<Integer> factors = new ArrayList<>();
+        if (n < 2) return factors; // 0, 1 and negatives have no prime factorisation (0 looped forever)
         
         // Handle factor 2
         while (n % 2 == 0) {

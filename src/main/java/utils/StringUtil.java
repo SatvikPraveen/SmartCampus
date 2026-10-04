@@ -394,6 +394,7 @@ public final class StringUtil {
         if (str == null) return null;
         if (suffix == null) suffix = "...";
         if (str.length() <= maxLength) return str;
+        if (maxLength <= suffix.length()) return truncate(str, Math.max(0, maxLength));
         return str.substring(0, maxLength - suffix.length()) + suffix;
     }
     
@@ -679,7 +680,7 @@ public final class StringUtil {
      * Counts occurrences of substring
      */
     public static int countOccurrences(String str, String searchStr) {
-        if (str == null || searchStr == null) return 0;
+        if (str == null || searchStr == null || searchStr.isEmpty()) return 0;
         int count = 0;
         int index = 0;
         while ((index = str.indexOf(searchStr, index)) != -1) {

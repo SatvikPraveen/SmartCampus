@@ -293,7 +293,7 @@ public final class SecurityUtil {
         if (isCommonPassword(password)) score = Math.max(0, score - 3);
         
         // Convert score to strength
-        switch (Math.min(score, 5)) {
+        switch (score) {
             case 0: case 1: return PasswordStrength.VERY_WEAK;
             case 2: return PasswordStrength.WEAK;
             case 3: return PasswordStrength.FAIR;
@@ -437,12 +437,13 @@ public final class SecurityUtil {
     public static String sanitizeForXSS(String input) {
         if (input == null) return null;
         
-        return input.replaceAll("<", "&lt;")
-                   .replaceAll(">", "&gt;")
-                   .replaceAll("\"", "&quot;")
-                   .replaceAll("'", "&#x27;")
-                   .replaceAll("&", "&amp;")
-                   .replaceAll("/", "&#x2F;");
+        // '&' must be escaped first, otherwise the entities produced below get double-escaped
+        return input.replace("&", "&amp;")
+                   .replace("<", "&lt;")
+                   .replace(">", "&gt;")
+                   .replace("\"", "&quot;")
+                   .replace("'", "&#x27;")
+                   .replace("/", "&#x2F;");
     }
     
     /**
@@ -451,12 +452,14 @@ public final class SecurityUtil {
     public static String sanitizeForSQL(String input) {
         if (input == null) return null;
         
-        return input.replaceAll("'", "''")
-                   .replaceAll("\"", "\"\"")
-                   .replaceAll(";", "\\;")
-                   .replaceAll("--", "\\-\\-")
-                   .replaceAll("/\\*", "\\/\\*")
-                   .replaceAll("\\*/", "\\*\\/");
+        // Literal (non-regex) replacements: with replaceAll a replacement of "\\;" is just ";",
+        // which silently turned the last four escapes into no-ops
+        return input.replace("'", "''")
+                   .replace("\"", "\"\"")
+                   .replace(";", "\\;")
+                   .replace("--", "\\-\\-")
+                   .replace("/*", "\\/\\*")
+                   .replace("*/", "\\*\\/");
     }
     
     /**

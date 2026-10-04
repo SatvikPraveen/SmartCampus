@@ -89,6 +89,8 @@ public final class CacheUtil {
         private final Duration defaultTtl;
         private final int maxSize;
         private final ReentrantReadWriteLock lock;
+        private final java.util.concurrent.atomic.AtomicLong hits = new java.util.concurrent.atomic.AtomicLong();
+        private final java.util.concurrent.atomic.AtomicLong misses = new java.util.concurrent.atomic.AtomicLong();
         
         public SimpleCache() {
             this(1000, Duration.ofHours(1));
@@ -106,8 +108,10 @@ public final class CacheUtil {
             try {
                 CacheEntry<V> entry = cache.get(key);
                 if (entry == null || entry.isExpired()) {
+                    misses.incrementAndGet();
                     return null;
                 }
+                hits.incrementAndGet();
                 return entry.getValue();
             } finally {
                 lock.readLock().unlock();
@@ -148,8 +152,8 @@ public final class CacheUtil {
             
             lock.writeLock().lock();
             try {
-                // Evict if at capacity
-                if (cache.size() >= maxSize) {
+                // Evict if at capacity (replacing an existing key does not grow the cache)
+                if (!cache.containsKey(key) && cache.size() >= maxSize) {
                     evictOldest();
                 }
                 
@@ -251,10 +255,9 @@ public final class CacheUtil {
         }
         
         private double getHitRate() {
-            long totalAccesses = cache.values().stream()
-                .mapToLong(CacheEntry::getAccessCount)
-                .sum();
-            return totalAccesses > 0 ? (double) cache.size() / totalAccesses : 0.0;
+            long h = hits.get();
+            long total = h + misses.get();
+            return total > 0 ? (double) h / total : 0.0;
         }
         
         private long getExpiredCount() {

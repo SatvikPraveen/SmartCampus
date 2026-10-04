@@ -148,6 +148,7 @@ public final class DateUtil {
      * Creates date from string with custom format
      */
     public static Optional<LocalDate> parseDate(String dateString, DateTimeFormatter formatter) {
+        if (dateString == null) return Optional.empty();
         try {
             return Optional.of(LocalDate.parse(dateString, formatter));
         } catch (DateTimeParseException e) {
@@ -166,6 +167,7 @@ public final class DateUtil {
      * Creates datetime from string with custom format
      */
     public static Optional<LocalDateTime> parseDateTime(String dateTimeString, DateTimeFormatter formatter) {
+        if (dateTimeString == null) return Optional.empty();
         try {
             return Optional.of(LocalDateTime.parse(dateTimeString, formatter));
         } catch (DateTimeParseException e) {
