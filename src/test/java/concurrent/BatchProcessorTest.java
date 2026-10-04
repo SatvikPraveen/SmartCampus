@@ -21,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -319,5 +320,28 @@ class BatchProcessorTest {
                 .isInstanceOf(RejectedExecutionException.class);
         assertThatThrownBy(() -> p.processParallelBatch(numbers(3), i -> i, "Late"))
                 .isInstanceOf(RejectedExecutionException.class);
+    }
+
+    @Test
+    void interruptedPermitWaitDoesNotReleaseAPermitItNeverAcquired() throws Exception {
+        BatchProcessor p = processor(2, 10, 1);
+        CompletableFuture<Thread> waiter = new CompletableFuture<>();
+        Semaphore noPermits = new Semaphore(0) {
+            @Override
+            public void acquire() throws InterruptedException {
+                waiter.complete(Thread.currentThread());
+                super.acquire();
+            }
+        };
+
+        CompletableFuture<?> chunk = p.processBatchChunk(List.of(1, 2), Function.identity(), noPermits);
+        Thread worker = waiter.get(10, TimeUnit.SECONDS);
+        while (!noPermits.hasQueuedThreads()) {
+            Thread.onSpinWait();
+        }
+        worker.interrupt();
+        chunk.get(10, TimeUnit.SECONDS);
+
+        assertThat(noPermits.availablePermits()).isZero();
     }
 }

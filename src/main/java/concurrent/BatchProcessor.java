@@ -137,13 +137,22 @@ public class BatchProcessor {
     /**
      * Process a single batch chunk
      */
-    private <T> CompletableFuture<BatchChunkResult<T>> processBatchChunk(
+    // package-private for tests
+    <T> CompletableFuture<BatchChunkResult<T>> processBatchChunk(
             List<T> batch, Function<T, T> processor, Semaphore semaphore) {
         
         return CompletableFuture.supplyAsync(() -> {
+            // Acquire outside the try: if the wait is interrupted no permit was taken, so the
+            // finally block must not release one (that would raise the concurrency limit).
             try {
                 semaphore.acquire();
-                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return new BatchChunkResult<>(
+                    new ArrayList<>(), 0, 
+                    Arrays.asList("Batch processing interrupted"));
+            }
+            try {
                 List<T> processedItems = new ArrayList<>();
                 List<String> errors = new ArrayList<>();
                 int processedCount = 0;
@@ -160,11 +169,6 @@ public class BatchProcessor {
                 
                 return new BatchChunkResult<>(processedItems, processedCount, errors);
                 
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return new BatchChunkResult<>(
-                    new ArrayList<>(), 0, 
-                    Arrays.asList("Batch processing interrupted"));
             } finally {
                 semaphore.release();
             }
