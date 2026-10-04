@@ -1,530 +1,289 @@
-# SmartCampus Backend - University Management System
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Java Version](https://img.shields.io/badge/Java-17+-blue.svg)](https://openjdk.java.net/projects/jdk/17/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
-[![Code Coverage](https://img.shields.io/badge/Coverage-85%25-green.svg)](https://github.com/SatvikPraveen/SmartCampus)
-
-A comprehensive Smart Campus Management System backend built with modern Spring Boot architecture, providing enterprise-grade RESTful APIs for managing academic institutions' complete operations. This system demonstrates advanced Java programming concepts, Spring Boot best practices, design patterns, and production-ready deployment strategies.
-
-## 🏗️ Architecture Overview
-
-SmartCampus follows a modern layered architecture with clear separation of concerns:
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        Presentation Layer                               │
-│              (REST Controllers + OpenAPI Documentation)                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│                         Service Layer                                   │
-│           (Business Logic + Transaction Management + Caching)           │
-├─────────────────────────────────────────────────────────────────────────┤
-│                       Repository Layer                                  │
-│              (Data Access + JPA Repositories + Queries)                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│                        Domain Layer                                     │
-│                  (JPA Entities + Domain Models)                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                     Infrastructure Layer                                │
-│         (Database + Cache + External APIs + File System)                │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## 🚀 Key Features
-
-### Core Academic Management
-
--   **Student Lifecycle Management**: Complete student management from admission to graduation
--   **Course Management**: Course creation, scheduling, prerequisite handling, and capacity management
--   **Enrollment System**: Automated enrollment with real-time availability and waitlist management
--   **Grading System**: Flexible grading schemes, assignment tracking, and GPA calculation
--   **Department Management**: Academic department organization and faculty assignment
-
-### Advanced System Features
-
--   **Multi-Role Authentication**: JWT-based authentication with role-based access control (Students, Faculty, Admin)
--   **Audit Trail**: Complete audit logging for compliance and security monitoring
--   **Caching Strategy**: Multi-level caching with in-memory and distributed cache
--   **Concurrent Processing**: Async operations for bulk enrollment and notifications
--   **Event-Driven Architecture**: Domain events for loose coupling and scalability
--   **File Management**: Document upload, storage, and retrieval system
-
-### Technical Excellence
-
--   **RESTful API Design**: Well-documented APIs with OpenAPI/Swagger
--   **Security Framework**: Comprehensive security with input validation and SQL injection prevention
--   **Performance Optimization**: Database query optimization and connection pooling
--   **Testing Suite**: Unit, integration, and functional testing with high coverage
--   **Containerization**: Docker support with multi-environment configurations
--   **Modern Java Features**: Records, sealed classes, pattern matching, and functional programming
-
-## 🛠️ Technology Stack
-
-**Core Framework**
-
--   **Spring Boot 3.2.x**: Enterprise application framework
--   **Spring Security**: Authentication and authorization
--   **Spring Data JPA**: Data access with Hibernate ORM
--   **Spring Cache**: Caching abstraction with Redis integration
-
-**Database & Persistence**
-
--   **PostgreSQL**: Primary relational database
--   **Redis**: High-performance caching and session storage
--   **Flyway**: Database migration and versioning
-
-**Documentation & Testing**
-
--   **OpenAPI 3/Swagger**: Interactive API documentation
--   **JUnit 5**: Modern testing framework
--   **TestContainers**: Integration testing with real database instances
--   **Mockito**: Mocking framework for unit tests
-
-**Build & Deployment**
-
--   **Maven**: Dependency management and build automation
--   **Docker**: Containerization with multi-stage builds
--   **GitHub Actions**: CI/CD pipeline automation
-
-## 📋 Prerequisites
-
--   **Java 17+** (OpenJDK or Oracle JDK)
--   **Apache Maven 3.8+**
--   **PostgreSQL 13+** (or Docker for containerized setup)
--   **Git** for version control
-
-**Optional but Recommended**
-
--   **Redis 6.0+** for caching
--   **Docker & Docker Compose** for easy setup
--   **IDE with Spring Boot support** (IntelliJ IDEA, Eclipse STS, VS Code)
-
-## ⚡ Quick Start
-
-### Method 1: Docker Setup (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/SatvikPraveen/SmartCampus.git
-cd SmartCampus
-
-# Start all services with Docker Compose
-docker-compose up -d
-
-# Verify services are running
-docker-compose ps
-
-# View application logs
-docker-compose logs -f smartcampus-backend
-```
-
-**Available Services:**
-
--   **API Server**: http://localhost:8080
--   **API Documentation**: http://localhost:8080/swagger-ui.html
--   **Database**: localhost:5432
--   **Redis Cache**: localhost:6379
-
-### Method 2: Local Development Setup
-
-**1. Database Setup**
-
-```bash
-# Create PostgreSQL database
-createdb smartcampus
-
-# Or using Docker for database only
-docker run --name smartcampus-db \
-  -e POSTGRES_DB=smartcampus \
-  -e POSTGRES_USER=smartcampus \
-  -e POSTGRES_PASSWORD=smartcampus123 \
-  -p 5432:5432 -d postgres:15
-```
-
-**2. Application Build and Run**
-
-```bash
-# Install dependencies and build
-mvn clean install
-
-# Run with development profile
-mvn spring-boot:run -Dspring.profiles.active=dev
-
-# Alternative: Run as JAR
-java -jar target/smartcampus-backend.jar --spring.profiles.active=dev
-```
-
-**3. Verification**
-
-```bash
-# Check application health
-curl http://localhost:8080/actuator/health
-
-# View API documentation
-open http://localhost:8080/swagger-ui.html
-```
-
-## 🏗️ Project Structure
-
-```
-src/
-├── main/
-│   ├── java/
-│   │   ├── annotations/          # Custom annotations (@Entity, @Audited, @Cacheable)
-│   │   ├── app/                  # Main application class
-│   │   ├── cache/                # Caching strategies and LRU implementation
-│   │   ├── com/smartcampus/      # Main application package
-│   │   ├── concurrent/           # Async processing and concurrent operations
-│   │   ├── enums/                # System enumerations (roles, status, etc.)
-│   │   ├── events/               # Event-driven architecture implementation
-│   │   ├── exceptions/           # Custom exception hierarchy
-│   │   ├── functional/           # Functional programming utilities
-│   │   ├── interfaces/           # Core system interfaces
-│   │   ├── io/                   # File I/O and external system integration
-│   │   ├── models/               # JPA entities and domain models
-│   │   ├── patterns/             # Design pattern implementations
-│   │   ├── reflection/           # Reflection-based utilities
-│   │   ├── repositories/         # Data access layer
-│   │   ├── security/             # Security implementation
-│   │   ├── services/             # Business logic layer
-│   │   └── utils/                # Utility classes and helpers
-│   └── resources/
-│       ├── application.yml       # Main configuration
-│       ├── config/               # External configurations
-│       ├── data/                 # Sample data files (CSV)
-│       ├── sql/                  # Database scripts and migrations
-│       └── templates/            # Email and report templates
-└── test/
-    ├── java/
-    │   ├── functional/           # End-to-end tests
-    │   ├── integration/          # Integration tests
-    │   └── unit/                 # Unit tests
-    └── resources/
-        ├── fixtures/             # Test fixtures and mock data
-        └── test-data/            # Test-specific data files
-```
-
-## 🔐 Security Features
-
-### Authentication & Authorization
-
--   **JWT Token-based Authentication**: Stateless authentication with refresh tokens
--   **Role-Based Access Control (RBAC)**: Multi-level authorization (STUDENT, FACULTY, ADMIN)
--   **Method-Level Security**: Fine-grained access control with `@PreAuthorize` and `@PostAuthorize`
--   **Password Security**: BCrypt hashing with configurable strength
-
-### Data Protection
-
--   **Input Validation**: Comprehensive validation using Bean Validation API
--   **SQL Injection Prevention**: Parameterized queries and JPA protection
--   **XSS Protection**: Input sanitization and output encoding
--   **CORS Configuration**: Configurable cross-origin resource sharing
-
-### Audit & Compliance
-
--   **Audit Trail**: Automatic auditing of all entity changes
--   **Security Event Logging**: Authentication attempts, access violations, and security events
--   **Data Retention**: Configurable data retention policies
-
-## 🚀 Performance Features
-
-### Caching Strategy
-
--   **Multi-Level Caching**: L1 (Caffeine) + L2 (Redis) caching
--   **Cache Abstraction**: Spring Cache with configurable TTL and eviction policies
--   **Query Result Caching**: Database query result caching for improved performance
-
-### Database Optimization
-
--   **Connection Pooling**: HikariCP for high-performance connection management
--   **Query Optimization**: Optimized JPA queries with fetch strategies
--   **Database Migrations**: Versioned database schema management with Flyway
-
-### Async Processing
-
--   **Concurrent Operations**: Async processing for bulk operations and notifications
--   **Thread Pool Management**: Configurable thread pools for different operation types
--   **Batch Processing**: Efficient bulk data processing capabilities
-
-## 📊 Monitoring & Observability
-
-### Health Checks
-
--   **Actuator Endpoints**: Comprehensive health monitoring endpoints
--   **Custom Health Indicators**: Database, cache, and external service health checks
--   **Readiness and Liveness Probes**: Kubernetes-ready health probes
-
-### Metrics & Logging
-
--   **Application Metrics**: Performance metrics with Micrometer
--   **Structured Logging**: JSON-formatted logs for production environments
--   **Audit Logging**: Complete audit trail for compliance requirements
-
-## 🧪 Testing Strategy
-
-### Test Coverage
-
--   **Unit Tests**: Service and utility class testing with Mockito
--   **Integration Tests**: Repository and API endpoint testing with TestContainers
--   **Functional Tests**: End-to-end workflow testing
--   **Performance Tests**: Load testing and concurrent operation testing
-
-### Test Commands
-
-```bash
-# Run all tests
-mvn clean test
-
-# Run specific test categories
-mvn test -Dtest="*Test"              # Unit tests
-mvn test -Dtest="*IT,*Integration*"  # Integration tests
-mvn test -Dtest="*Functional*"       # Functional tests
-
-# Generate coverage report
-mvn test jacoco:report
-```
-
-## 📁 Configuration Management
-
-### Application Profiles
-
--   **Development (`dev`)**: H2 database, debug logging, hot reload
--   **Test (`test`)**: TestContainers, isolated test database
--   **Production (`prod`)**: PostgreSQL, optimized settings, security hardening
-
-### Environment Variables
-
-```bash
-# Database Configuration
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_NAME=smartcampus
-export DB_USERNAME=smartcampus
-export DB_PASSWORD=your_password
-
-# Security Configuration
-export JWT_SECRET=your-jwt-secret-key
-export JWT_EXPIRATION=86400000
-
-# Cache Configuration
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-```
-
-## 🔄 API Documentation
-
-### Core Endpoints
-
-**Authentication**
-
-```bash
-POST /api/auth/login          # User authentication
-POST /api/auth/refresh        # Token refresh
-POST /api/auth/logout         # User logout
-```
-
-**User Management**
-
-```bash
-GET    /api/users             # List users (paginated)
-GET    /api/users/{id}        # Get user by ID
-POST   /api/users             # Create new user
-PUT    /api/users/{id}        # Update user
-DELETE /api/users/{id}        # Delete user
-```
-
-**Academic Management**
-
-```bash
-GET    /api/students          # List students
-POST   /api/students          # Create student
-GET    /api/courses           # List courses
-POST   /api/courses           # Create course
-POST   /api/enrollments       # Enroll student
-GET    /api/grades            # Get grades
-POST   /api/grades            # Submit grade
-```
-
-### Interactive Documentation
-
-Access the Swagger UI at: http://localhost:8080/swagger-ui.html
-
-## 🐳 Docker Deployment
-
-### Development Environment
-
-```bash
-# Start development environment
-docker-compose -f docker-compose.dev.yml up -d
-
-# View logs
-docker-compose logs -f smartcampus-backend
-```
-
-### Production Deployment
-
-```bash
-# Build production image
-docker build -t smartcampus/backend:latest .
-
-# Deploy production environment
-docker-compose -f docker-compose.yml up -d
-
-# Scale application
-docker-compose up --scale smartcampus-backend=3
-```
-
-## 🎯 Design Patterns Implemented
-
-### Creational Patterns
-
--   **Builder Pattern**: Complex object construction (CourseBuilder, StudentBuilder)
--   **Factory Pattern**: Service instantiation (ServiceFactory, UniversityFactory)
--   **Singleton Pattern**: Configuration management (DatabaseConnection)
-
-### Structural Patterns
-
--   **Repository Pattern**: Data access abstraction
--   **Adapter Pattern**: External service integration (AdapterService)
--   **Facade Pattern**: Service layer abstraction
-
-### Behavioral Patterns
-
--   **Observer Pattern**: Event-driven architecture (EventManager)
--   **Strategy Pattern**: Caching strategies and algorithms
--   **Command Pattern**: Operation encapsulation (CommandProcessor)
--   **Template Method Pattern**: Common processing workflows
-
-## 🔧 Development Guidelines
-
-### Code Style
-
--   Follow Java naming conventions
--   Use meaningful variable and method names
--   Implement proper error handling
--   Write comprehensive JavaDoc for public APIs
--   Maintain consistent code formatting
-
-### Testing Requirements
-
--   Minimum 85% code coverage
--   Unit tests for all service methods
--   Integration tests for API endpoints
--   Functional tests for critical workflows
-
-### Git Workflow
-
-```bash
-# Create feature branch
-git checkout -b feature/your-feature-name
-
-# Make changes and commit
-git add .
-git commit -m "feat: add new feature description"
-
-# Push and create pull request
-git push origin feature/your-feature-name
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-### Code Review Process
-
--   All contributions require code review
--   Automated CI/CD pipeline validation
--   Manual testing verification
--   Documentation updates when needed
-
-## 📈 Performance Benchmarks
-
--   **Application Startup**: < 45 seconds
--   **Average Response Time**: < 150ms (95th percentile < 500ms)
--   **Throughput**: 2,000+ requests/second
--   **Memory Usage**: 512MB baseline, 1.5GB under load
--   **Database Connection Pool**: 50 connections, 60% average utilization
-
-## 🗺️ Roadmap
-
-### Version 1.1 (Upcoming)
-
--   [ ] GraphQL API implementation
--   [ ] Real-time notifications with WebSocket
--   [ ] Advanced search with Elasticsearch
--   [ ] Mobile API optimizations
--   [ ] Enhanced bulk operations
-
-### Version 1.2 (Future)
-
--   [ ] Machine Learning integration for recommendations
--   [ ] Advanced analytics and reporting
--   [ ] Multi-tenant support
--   [ ] Microservices architecture migration
--   [ ] OAuth2 integration
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Application won't start**
-
-```bash
-# Check port availability
-lsof -i :8080
-
-# Check database connection
-pg_isready -h localhost -p 5432
-
-# View detailed logs
-mvn spring-boot:run -X
-```
-
-**Database connection issues**
-
-```bash
-# Test database connectivity
-psql -h localhost -U smartcampus -d smartcampus
-
-# Check Docker database status
-docker-compose ps postgres
-```
-
-**Memory issues**
-
-```bash
-# Increase JVM memory
-export JAVA_OPTS="-Xms1g -Xmx2g"
-mvn spring-boot:run
-```
-
-## 📞 Support
-
--   **Issues**: [GitHub Issues](https://github.com/SatvikPraveen/SmartCampus/issues)
--   **Discussions**: [GitHub Discussions](https://github.com/SatvikPraveen/SmartCampus/discussions)
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
--   Spring Framework team for the comprehensive ecosystem
--   PostgreSQL community for the robust database system
--   Open source community for the incredible tools and libraries
--   All contributors and users of this project
+<div align="center">
+
+# SmartCampus
+
+**A course-timetabling research engine and university-management domain library, served through a Spring Boot REST API.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Java 21](https://img.shields.io/badge/Java-21_LTS-orange.svg)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot 3.2](https://img.shields.io/badge/Spring_Boot-3.2-6DB33F.svg)](https://spring.io/projects/spring-boot)
+[![Tests](https://img.shields.io/badge/tests-JUnit_5-25A162.svg)](#testing-and-quality)
+[![Reproducible](https://img.shields.io/badge/benchmarks-seeded_%26_paired-8A2BE2.svg)](docs/research/timetabling.md)
+[![Cite](https://img.shields.io/badge/cite-CITATION.cff-lightgrey.svg)](CITATION.cff)
+
+[Overview](#overview) •
+[Key results](#key-results) •
+[Quick start](#quick-start) •
+[REST API](#rest-api) •
+[The engine](#the-timetabling-engine) •
+[Reproducing](#reproducing-the-experiments) •
+[Architecture](#architecture) •
+[Citation](#citation)
+
+</div>
 
 ---
 
-**Built with ❤️ using modern Java technologies and Spring Boot best practices.**
+## Overview
 
-For more information, visit: [https://github.com/SatvikPraveen/SmartCampus](https://github.com/SatvikPraveen/SmartCampus)
+Every term, a university has to place hundreds of course meetings into a weekly grid of time
+slots and rooms. No student or instructor can be in two places at once, and every room must
+be large enough. Within those limits the timetable should also be humane: few classes in the
+last period of the day, no long runs of back-to-back classes, and no days on campus for a
+single lecture. This is the **post-enrolment course timetabling problem**, a constrained
+combinatorial optimisation problem closely related to graph colouring.
+
+SmartCampus contains:
+
+| Component | What it is |
+|---|---|
+| **`scheduling`**: timetabling engine | Dependency-free Java package with an exact constraint model, incremental cost evaluation verified against a reference implementation, constructive and local-search solvers, a seeded instance generator and a paired benchmarking harness with bootstrap confidence intervals. |
+| **REST service** | Stateless Spring Boot 3 application exposing the engine (`/api/v1/timetabling`), with request validation, RFC 7807 errors, OpenAPI/Swagger UI and Actuator health probes. Needs no database. |
+| **Domain library** | University model (students, professors, departments, courses, enrollments, grades) with in-memory services and repositories, plus worked examples of design patterns, concurrency, reflection and functional programming in modern Java. |
+| **Research write-up** | Methodology, results, ablations, threats to validity and follow-up experiments in [`docs/research/timetabling.md`](docs/research/timetabling.md). |
+
+## Key results
+
+Ten paired seeds per instance family, 10⁶ local-search iterations, 5 days × 9 periods.
+Values are mean soft-constraint penalty (lower is better) with 95% bootstrap CIs. Full
+tables, decomposition and statistics are in [`docs/research/results/main/summary.md`](docs/research/results/main/summary.md).
+
+| Solver | small (100 events) | medium (200 events) | large (400 events) |
+|---|---:|---:|---:|
+| Random (baseline) | infeasible | infeasible | infeasible |
+| Greedy, input order | 687 [662, 713] | 2121 [2049, 2188] | feasible on 1/10 |
+| Greedy, largest degree first | 447 [432, 463] | 1382 [1359, 1399] | 3262 [3225, 3296] |
+| Greedy, DSATUR | 445 [434, 458] | 1389 [1366, 1414] | 3271 [3236, 3303] |
+| Simulated annealing (from DSATUR) | 316 [311, 323] | 1239 [1212, 1268] | 3115 [3075, 3157] |
+| Descent ablation (from DSATUR) | **319** [314, 324] | **1180** [1170, 1190] | **3006** [2988, 3024] |
+
+What the evidence supports:
+
+1. **Insertion order dominates construction.** Degree-based ordering lowers the soft cost by
+   about 35% compared with input order, and it is the difference between feasible and infeasible
+   timetables on large instances (10/10 vs 1/10 seeds).
+2. **DSATUR shows no detectable advantage over static largest-degree ordering** on these
+   instances. The point estimates differ by less than 1%, and every 95% CI includes 0.
+3. **Local search needs a budget threshold.** The SA gain is negligible at 10⁴–10⁵ iterations and
+   large at 10⁶ (−150 on medium, 10/10 wins).
+4. **Negative result: annealing is not what makes local search work here.** At equal budget, a
+   near-zero-temperature descent control matches SA on small instances and beats it on medium
+   (+59 [32, 88]) and large (+109 [75, 144]; 0/10 wins for SA).
+5. **Single-class days are the bottleneck.** They make up 77–97% of the remaining penalty and are
+   not reduced by relocate/swap moves. That points to compound neighbourhoods such as Kempe chains
+   as the next step.
+
+These conclusions come from synthetic instances. The scope and the planned validation on
+ITC-2007 data are described in [threats to validity](docs/research/timetabling.md#5-threats-to-validity).
+
+## Quick start
+
+Requirements: **JDK 21**. Maven comes with the wrapper.
+
+```bash
+git clone https://github.com/SatvikPraveen/SmartCampus.git
+cd SmartCampus
+
+./mvnw verify                 # compile, run the full test suite, enforce coverage gate
+./mvnw spring-boot:run        # start the API on http://localhost:8080
+```
+
+Or with Docker:
+
+```bash
+docker compose up --build     # same service, non-root layered JDK 21 image
+```
+
+Then open **http://localhost:8080/swagger-ui.html**, or try it from the shell:
+
+```bash
+# 1. Generate a benchmark instance (100 events, 400 students, 5 rooms)
+curl -s 'localhost:8080/api/v1/timetabling/instances/small?seed=1' > problem.json
+
+# 2. Solve it with simulated annealing
+jq '{problem: ., solver: "sa", seed: 1, iterations: 200000}' problem.json \
+  | curl -s -X POST localhost:8080/api/v1/timetabling/solve \
+         -H 'Content-Type: application/json' -d @- \
+  | jq '{solver, cost, first: .assignments[0]}'
+```
+
+```json
+{
+  "solver": "sa",
+  "cost": { "hard": 0, "soft": 383, "feasible": true, "lastPeriod": 3,
+            "consecutive": 1, "singleClassDays": 379, "...": "..." },
+  "first": { "eventId": "E0", "day": 0, "period": 8, "roomId": "R1" }
+}
+```
+
+## REST API
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/timetabling/solvers` | Available solvers and their descriptions |
+| `POST` | `/api/v1/timetabling/solve` | Solve an instance. Deterministic for a given `seed`. |
+| `GET` | `/api/v1/timetabling/instances/{small\|medium\|large}?seed=` | Generate a synthetic benchmark instance in request format |
+| `GET` | `/actuator/health`, `/actuator/health/{liveness,readiness}` | Health probes |
+| `GET` | `/swagger-ui.html`, `/v3/api-docs` | Interactive documentation and OpenAPI spec |
+
+<details>
+<summary><b>Solve request schema</b></summary>
+
+```jsonc
+{
+  "problem": {
+    "days": 5,                 // 1–7
+    "periodsPerDay": 9,        // 1–24
+    "rooms":  [{ "id": "R1", "capacity": 40 }],
+    "events": [{ "id": "CS101", "instructorId": "P7", "studentIds": ["S1", "S2"] }]
+  },
+  "solver": "sa",              // random | greedy | largest-degree | dsatur | sa   (default: sa)
+  "seed": 1,                   // default: 1
+  "iterations": 200000         // SA budget, ≤ 2,000,000 (default: 200,000)
+}
+```
+
+Invalid input returns `400` with an RFC 7807 `application/problem+json` body. Request size is
+bounded (≤ 2,000 events, ≤ 500 rooms) to keep each request within seconds of CPU time.
+
+</details>
+
+## The timetabling engine
+
+**Formulation.** Each event *e* gets a slot *t(e)* and a room *r(e)*. The conflict graph
+links events that share a student or an instructor. Solvers minimise
+`10⁶ · hard + soft`, which is lexicographic in practice:
+
+| Hard constraints (must be 0) | Soft constraints (minimised) |
+|---|---|
+| Unassigned events | Student-events in the last period of a day |
+| Student clashes, Σ max(0, events − 1) per (student, slot) | Runs of more than 2 consecutive classes, Σ (L − 2) |
+| Instructor clashes | Student-days with exactly one class |
+| Room double-bookings | |
+| Room capacity violations | |
+
+**Exact incremental evaluation.** `TimetableState` keeps occupancy counts per (student, slot),
+(instructor, slot) and (room, slot). Every cost term is a function of these counts, so a move
+costs **O(|students(e)| · periodsPerDay)** rather than O(students · slots). A property test
+applies thousands of random moves and asserts **exact equality** with the independent,
+deliberately naive `CostModel` ([ADR 0003](docs/adr/0003-count-based-incremental-evaluation.md)).
+
+**Solvers.**
+
+| Solver | Idea |
+|---|---|
+| `RandomSolver` | Zero-information baseline |
+| `GreedySolver` (`INPUT`, `RANDOM`, `LARGEST_DEGREE`, `DSATUR`) | Insert events one at a time at the cheapest (slot, best-fit room). The orderings follow the graph-colouring literature (Welsh–Powell, Brélaz). |
+| `SimulatedAnnealingSolver` | Relocate and swap moves, Metropolis acceptance, geometric cooling, T₀ calibrated from sampled soft deltas, best-so-far tracking. Never worse than its seeded start. |
+| `SimulatedAnnealingSolver.descent` | Ablation control: same moves and budget at near-zero temperature |
+
+**Using it as a library:**
+
+```java
+TimetablingProblem problem = new TimetablingProblem(events, rooms, /* days */ 5, /* periods */ 9);
+TimetableSolver solver = new SimulatedAnnealingSolver(
+        new GreedySolver(GreedySolver.Ordering.DSATUR),
+        SimulatedAnnealingSolver.Config.defaults(1_000_000));
+SolverResult result = solver.solve(problem, /* seed */ 42);
+System.out.println(result.cost());   // CostBreakdown[unassigned=0, studentClashes=0, ...]
+```
+
+## Reproducing the experiments
+
+Instances, solvers and bootstrap resampling are all seeded, so every cost in this README is
+reproduced exactly. Budgets are counted in iterations, not seconds.
+
+```bash
+./mvnw -q compile
+./mvnw -q exec:java -Dexec.args="--seeds 10 --iterations 1000000 --out results"
+# options: --sizes small,medium,large   --seeds N   --iterations N   --out DIR
+```
+
+This produces `results/runs.csv` (one row per solver run, with every cost component and the
+timing) and `results/summary.md` (CIs, decomposition and paired tests). The committed
+results and the budget sweep are in [`docs/research/results/`](docs/research/results/).
+
+## Architecture
+
+```
+com.smartcampus.api  ──►  scheduling (JDK only)        domain library (JDK only)
+  REST, validation         model · eval · solver ·        models · services · repositories ·
+  OpenAPI, Actuator        experiment                     patterns · concurrent · functional ·
+                                                          security · io · cache · reflection
+```
+
+The engine does not depend on Spring or on the domain library, so it can be tested and
+benchmarked in isolation. Domain entities reference one another by ID
+([ADR 0001](docs/adr/0001-id-referenced-domain-model.md)). See
+[`docs/architecture.md`](docs/architecture.md) for the package-by-package layout and
+[`docs/design/design-patterns.md`](docs/design/design-patterns.md) for the pattern catalogue.
+
+<details>
+<summary><b>Repository layout</b></summary>
+
+```
+SmartCampus/
+├── src/main/java/
+│   ├── com/smartcampus/        Spring Boot application, REST API
+│   ├── scheduling/             Timetabling engine (model, eval, solver, experiment)
+│   ├── models/ enums/          Domain entities and enumerations
+│   ├── services/ repositories/ In-memory business logic and storage
+│   ├── patterns/ concurrent/ functional/ reflection/   Language and design showcases
+│   └── security/ io/ cache/ utils/ exceptions/ ...
+├── src/test/java/              Tests mirroring the main packages
+├── docs/
+│   ├── research/               Methodology, results, raw CSVs
+│   ├── adr/                    Architecture decision records
+│   └── architecture.md
+├── Dockerfile, docker-compose.yml
+└── CITATION.cff, CHANGELOG.md, CONTRIBUTING.md, SECURITY.md
+```
+
+</details>
+
+## Testing and quality
+
+| Layer | Approach |
+|---|---|
+| Cost model | Hand-computed fixtures for every constraint type, plus a property test (incremental ≡ reference) |
+| Solvers | Determinism per seed, feasibility on easy instances, beats the random baseline, local search never worse than its start |
+| Statistics | Analytic checks: bootstrap reproducibility, sign-test binomial tails |
+| REST API | `@SpringBootTest` + MockMvc covering the HTTP contract, validation errors and health |
+| Domain library | Unit tests for services, models, utilities, security and repositories, written as regression tests for the bugs they exposed |
+
+`./mvnw verify` runs everything and enforces an **85% line-coverage floor** on the engine's
+model, evaluation and solver packages through JaCoCo. The report is written to
+`target/site/jacoco/index.html`. CI, CodeQL and release workflows are ready in
+[`.github/workflow-drafts/`](.github/workflow-drafts/README.md).
+
+## Roadmap
+
+- [ ] Temperature-calibration sweep to test *why* descent beats SA ([research §6](docs/research/timetabling.md#6-open-hypotheses-and-next-experiments))
+- [ ] Kempe-chain neighbourhood aimed at single-class days
+- [ ] ITC-2007 post-enrolment instance loader for external validation
+- [ ] Adapter from `models.Course` enrollments to `scheduling.TimetablingProblem`
+- [ ] Room features and per-event time-window constraints
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and the
+reproducibility requirements for solver changes. Report security issues as described in
+[SECURITY.md](SECURITY.md).
+
+## Citation
+
+If you use SmartCampus or its benchmark results, please cite it ([`CITATION.cff`](CITATION.cff)):
+
+```bibtex
+@software{praveen_smartcampus_2026,
+  author  = {Praveen, Satvik},
+  title   = {SmartCampus: a course-timetabling engine with reproducible benchmarks},
+  year    = {2026},
+  version = {2.0.0},
+  url     = {https://github.com/SatvikPraveen/SmartCampus}
+}
+```
+
+## License
+
+Released under the [MIT License](LICENSE) © 2025 Satvik Praveen.

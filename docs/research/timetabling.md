@@ -148,7 +148,7 @@ runs and is an inference, not a direct test.
 | sa(greedy-dsatur) | 28.2 | 29.5 | 1181.1 |
 
 The same pattern holds in all three families (see the summary). Single-class days account
-for 77–96% of the remaining soft cost and *increase* slightly under local search, which
+for 77–97% of the remaining soft cost and *increase* slightly under local search, which
 trades them for last-period and consecutive-class reductions. Relocate/swap moves change one
 or two events at a time, but removing a single-class day requires moving an event next to
 another event of the *same student* without creating clashes for any other student. These
