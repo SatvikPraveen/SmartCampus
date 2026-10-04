@@ -51,7 +51,7 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         this.departmentCourses = new ConcurrentHashMap<>();
         this.departmentBudgets = new ConcurrentHashMap<>();
         this.cachedStatistics = new HashMap<>();
-        this.lastStatisticsUpdate = LocalDateTime.now();
+        this.lastStatisticsUpdate = null; // nothing cached yet
     }
     
     // Core CRUD operations
@@ -88,11 +88,16 @@ public class DepartmentService implements Searchable<Department>, Reportable {
      * @return true if department was updated successfully, false otherwise
      */
     public boolean updateDepartment(Department department) {
-        if (department == null || !departments.containsKey(department.getDepartmentId())) {
+        if (department == null || department.getDepartmentId() == null
+                || !departments.containsKey(department.getDepartmentId())) {
             return false;
         }
-        
+
         departments.put(department.getDepartmentId(), department);
+        // Carry the service's membership indices over to the replacement object
+        updateDepartmentEnrollment(department.getDepartmentId());
+        updateDepartmentProfessorCount(department.getDepartmentId());
+        updateDepartmentCourseCount(department.getDepartmentId());
         invalidateStatisticsCache();
         return true;
     }
@@ -436,8 +441,10 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         statistics.put("activeDepartments", activeDepartments.size());
         statistics.put("totalEnrollment", enrollmentStats.getSum());
         statistics.put("averageEnrollment", enrollmentStats.getAverage());
-        statistics.put("maxEnrollment", enrollmentStats.getMax());
-        statistics.put("minEnrollment", enrollmentStats.getMin());
+        // An empty summary reports MIN_VALUE/MAX_VALUE; report 0 when there are no active departments
+        boolean hasActive = enrollmentStats.getCount() > 0;
+        statistics.put("maxEnrollment", hasActive ? enrollmentStats.getMax() : 0);
+        statistics.put("minEnrollment", hasActive ? enrollmentStats.getMin() : 0);
         statistics.put("facultyToStudentRatios", getFacultyToStudentRatios());
         statistics.put("programStatistics", getProgramOfferingStatistics());
         statistics.put("totalBudget", getTotalBudget());
@@ -704,9 +711,11 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         if (department != null) {
             List<String> professors = departmentProfessors.get(departmentId);
             if (professors != null) {
-                // Update professor IDs in department
-                department.getProfessorIds().clear();
-                department.getProfessorIds().addAll(professors);
+                // getProfessorIds() is a defensive copy, so sync through the department's mutators
+                professors.forEach(department::addProfessor);
+                new ArrayList<>(department.getProfessorIds()).stream()
+                        .filter(professorId -> !professors.contains(professorId))
+                        .forEach(department::removeProfessor);
                 invalidateStatisticsCache();
             }
         }
@@ -720,9 +729,11 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         if (department != null) {
             List<String> courses = departmentCourses.get(departmentId);
             if (courses != null) {
-                // Update course IDs in department
-                department.getCourseIds().clear();
-                department.getCourseIds().addAll(courses);
+                // getCourseIds() is a defensive copy, so sync through the department's mutators
+                courses.forEach(department::addCourse);
+                new ArrayList<>(department.getCourseIds()).stream()
+                        .filter(courseId -> !courses.contains(courseId))
+                        .forEach(department::removeCourse);
                 invalidateStatisticsCache();
             }
         }
@@ -891,12 +902,14 @@ public class DepartmentService implements Searchable<Department>, Reportable {
         
         // Add location statistics
         long totalDepartments = departments.size();
+        // Guard the percentage against an empty service (0/0 would print "NaN%")
+        long percentageBase = Math.max(1, totalDepartments);
         locationStats.forEach((location, count) -> {
             Map<String, Object> row = new HashMap<>();
             row.put("Category", "Location");
             row.put("Value", location);
             row.put("Count", count);
-            row.put("Percentage", String.format("%.1f%%", (count * 100.0) / totalDepartments));
+            row.put("Percentage", String.format("%.1f%%", (count * 100.0) / percentageBase));
             rows.add(row);
         });
         
@@ -906,7 +919,7 @@ public class DepartmentService implements Searchable<Department>, Reportable {
             row.put("Category", "Status");
             row.put("Value", active ? "Active" : "Inactive");
             row.put("Count", count);
-            row.put("Percentage", String.format("%.1f%%", (count * 100.0) / totalDepartments));
+            row.put("Percentage", String.format("%.1f%%", (count * 100.0) / percentageBase));
             rows.add(row);
         });
         
