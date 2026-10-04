@@ -32,7 +32,7 @@ jobs:
         run: ./mvnw -B -ntp verify
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-jdk${{ matrix.java }}
           path: |
@@ -42,7 +42,7 @@ jobs:
         run: >
           ./mvnw -B -ntp -q exec:java
           -Dexec.args="--seeds 2 --iterations 20000 --sizes small --out target/benchmark-smoke"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: benchmark-smoke
           path: target/benchmark-smoke
