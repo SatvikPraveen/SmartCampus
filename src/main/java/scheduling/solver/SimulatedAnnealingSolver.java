@@ -56,15 +56,35 @@ public final class SimulatedAnnealingSolver implements TimetableSolver {
 
     private final TimetableSolver initial;
     private final Config config;
+    private final String label;
 
     public SimulatedAnnealingSolver(TimetableSolver initial, Config config) {
+        this(initial, config, "sa");
+    }
+
+    /**
+     * @param label prefix of {@link #name()}, e.g. {@code "descent"} for the near-zero-temperature
+     *              ablation built by {@link #descent}
+     */
+    public SimulatedAnnealingSolver(TimetableSolver initial, Config config, String label) {
         this.initial = initial;
         this.config = config;
+        this.label = label;
+    }
+
+    /**
+     * Ablation control: identical moves, budget and best-so-far tracking, but a temperature so low
+     * that an average worsening move is accepted with probability 1e-9. The search therefore
+     * behaves as stochastic descent that still accepts sideways (zero-delta) moves. Comparing it
+     * with annealing isolates the contribution of accepting worsening moves.
+     */
+    public static SimulatedAnnealingSolver descent(TimetableSolver initial, long iterations) {
+        return new SimulatedAnnealingSolver(initial, new Config(iterations, 1e-9, 1e-3, 200), "descent");
     }
 
     @Override
     public String name() {
-        return "sa(" + initial.name() + ")";
+        return label + "(" + initial.name() + ")";
     }
 
     @Override

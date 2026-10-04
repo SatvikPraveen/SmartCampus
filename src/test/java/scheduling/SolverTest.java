@@ -82,6 +82,16 @@ class SolverTest {
     }
 
     @Test
+    void descentAblationIsNamedAndNeverWorsensItsStart() {
+        GreedySolver base = new GreedySolver(GreedySolver.Ordering.INPUT);
+        SimulatedAnnealingSolver descent = SimulatedAnnealingSolver.descent(base, 20_000);
+        assertEquals("descent(greedy-input)", descent.name());
+        TimetablingProblem p = InstanceGenerator.generate(EASY, 4);
+        assertTrue(descent.solve(p, 4).cost().weighted(TimetableSolver.HARD_WEIGHT)
+                <= base.solve(p, 4).cost().weighted(TimetableSolver.HARD_WEIGHT));
+    }
+
+    @Test
     void annealingImprovesWeakStartOnAverage() {
         GreedySolver base = new GreedySolver(GreedySolver.Ordering.INPUT);
         TimetableSolver sa = new SimulatedAnnealingSolver(base, SimulatedAnnealingSolver.Config.defaults(50_000));

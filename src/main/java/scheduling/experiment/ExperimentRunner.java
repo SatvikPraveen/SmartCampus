@@ -53,6 +53,7 @@ public final class ExperimentRunner {
                 new GreedySolver(GreedySolver.Ordering.RANDOM),
                 new GreedySolver(GreedySolver.Ordering.LARGEST_DEGREE),
                 dsatur,
+                SimulatedAnnealingSolver.descent(dsatur, iterations),
                 new SimulatedAnnealingSolver(dsatur, SimulatedAnnealingSolver.Config.defaults(iterations)));
 
         Files.createDirectories(out);
@@ -115,16 +116,41 @@ public final class ExperimentRunner {
                         s.estimate(), s.lower(), s.upper(), Statistics.standardDeviation(soft),
                         Statistics.median(ms)));
             }
-            String saName = "sa(" + saBase + ")";
-            double[] saObj = objective(select(rows, family.name(), saName));
-            double[] baseObj = objective(select(rows, family.name(), saBase));
-            if (saObj.length == baseObj.length && saObj.length > 0) {
-                var diff = Statistics.pairedDifference(saObj, baseObj, 0.95, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED);
-                sb.append(String.format(Locale.ROOT, "%nPaired weighted-objective difference %s - %s: "
-                                + "%.1f [%.1f, %.1f]; sign-test p = %.4f.%n%n",
-                        saName, saBase, diff.estimate(), diff.lower(), diff.upper(),
-                        Statistics.signTestPValue(saObj, baseObj)));
+            sb.append(String.format(Locale.ROOT, "%nSoft-penalty decomposition (means):%n%n"));
+            sb.append("| solver | last period | >2 consecutive | single-class days |\n|---|---:|---:|---:|\n");
+            for (TimetableSolver solver : solvers) {
+                List<SolverResult> rs = select(rows, family.name(), solver.name());
+                sb.append(String.format(Locale.ROOT, "| %s | %.1f | %.1f | %.1f |%n", solver.name(),
+                        rs.stream().mapToLong(r -> r.cost().lastPeriod()).average().orElse(0),
+                        rs.stream().mapToLong(r -> r.cost().consecutive()).average().orElse(0),
+                        rs.stream().mapToLong(r -> r.cost().singleClassDays()).average().orElse(0)));
             }
+            sb.append(String.format(Locale.ROOT, "%nPaired weighted-objective differences "
+                    + "(negative = first solver better; 95%% bootstrap CI; exact two-sided sign test):%n%n"));
+            sb.append("| comparison | mean diff | 95% CI | wins/losses/ties | sign-test p |\n|---|---:|---:|---:|---:|\n");
+            String sa = "sa(" + saBase + ")";
+            String descent = "descent(" + saBase + ")";
+            String[][] pairs = {
+                {sa, saBase}, {descent, saBase}, {sa, descent}, {saBase, "greedy-largest-degree"},
+                {"greedy-largest-degree", "greedy-input"}};
+            for (String[] pair : pairs) {
+                double[] a = objective(select(rows, family.name(), pair[0]));
+                double[] b = objective(select(rows, family.name(), pair[1]));
+                if (a.length == 0 || a.length != b.length) {
+                    continue;
+                }
+                var diff = Statistics.pairedDifference(a, b, 0.95, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED);
+                int wins = 0;
+                int losses = 0;
+                for (int i = 0; i < a.length; i++) {
+                    wins += a[i] < b[i] ? 1 : 0;
+                    losses += a[i] > b[i] ? 1 : 0;
+                }
+                sb.append(String.format(Locale.ROOT, "| %s - %s | %.1f | [%.1f, %.1f] | %d/%d/%d | %.4f |%n",
+                        pair[0], pair[1], diff.estimate(), diff.lower(), diff.upper(),
+                        wins, losses, a.length - wins - losses, Statistics.signTestPValue(a, b)));
+            }
+            sb.append('\n');
         }
         return sb.toString();
     }
