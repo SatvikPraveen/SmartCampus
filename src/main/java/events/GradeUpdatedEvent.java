@@ -53,7 +53,8 @@ public class GradeUpdatedEvent extends Event {
                             String courseName, String courseCode, Semester semester,
                             int academicYear, GradeLevel newGrade, GradeLevel previousGrade,
                             String gradedBy, LocalDateTime gradedDate, boolean isFinalGrade) {
-        super(EVENT_TYPE, Priority.NORMAL, studentId, "Student", null);
+        super(EVENT_TYPE, determineGradePriority(newGrade, previousGrade, isFinalGrade),
+              studentId, "Student", null);
         
         this.studentId = studentId;
         this.studentName = studentName;
@@ -492,7 +493,7 @@ public class GradeUpdatedEvent extends Event {
     private void addGradeMetadata() {
         addMetadata("grade.studentId", studentId);
         addMetadata("grade.courseId", courseId);
-        addMetadata("grade.semester", semester.toString());
+        addMetadata("grade.semester", Objects.toString(semester, null));
         addMetadata("grade.academicYear", academicYear);
         addMetadata("grade.isFinalGrade", isFinalGrade);
         addMetadata("grade.gradeType", gradeType);
@@ -684,10 +685,8 @@ public class GradeUpdatedEvent extends Event {
                 gradeType, approvedBy
             );
             
-            // Apply builder properties
-            event.addMetadata(metadata);
-            
-            return event;
+            // Apply builder properties (metadata, priority, correlation ID, aggregate version)
+            return applyTo(event);
         }
     }
     

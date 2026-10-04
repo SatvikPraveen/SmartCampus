@@ -315,7 +315,7 @@ public abstract class Event {
         if (aggregateVersion != null) eventMap.put("aggregateVersion", aggregateVersion);
         
         eventMap.put("payload", getPayload());
-        eventMap.put("metadata", metadata);
+        eventMap.put("metadata", new HashMap<>(metadata));
         eventMap.put("description", getDescription());
         eventMap.put("valid", isValid());
         
@@ -352,7 +352,7 @@ public abstract class Event {
         
         // Add metadata
         if (!metadata.isEmpty()) {
-            logEntry.put("event.metadata", metadata);
+            logEntry.put("event.metadata", new HashMap<>(metadata));
         }
         
         return logEntry;
@@ -466,7 +466,8 @@ public abstract class Event {
      * Base builder class for events
      */
     public abstract static class Builder<T extends Event, B extends Builder<T, B>> {
-        protected Priority priority = Priority.NORMAL;
+        // null = not set: the concrete event keeps the priority it derives itself
+        protected Priority priority;
         protected String aggregateId;
         protected String aggregateType;
         protected Long aggregateVersion;
@@ -510,5 +511,23 @@ public abstract class Event {
         }
         
         public abstract T build();
+        
+        /**
+         * Applies the common builder properties (metadata, priority, correlation ID,
+         * aggregate version) to a freshly constructed event.
+         */
+        @SuppressWarnings("unchecked")
+        protected T applyTo(T built) {
+            Event event = built;
+            event.addMetadata(metadata);
+            return (T) event.createCopy(event.eventId, event.eventType, event.timestamp,
+                    event.sourceSystem,
+                    correlationId != null ? correlationId : event.correlationId,
+                    event.version,
+                    priority != null ? priority : event.priority,
+                    event.aggregateId, event.aggregateType,
+                    aggregateVersion != null ? aggregateVersion : event.aggregateVersion,
+                    event.metadata);
+        }
     }
 }

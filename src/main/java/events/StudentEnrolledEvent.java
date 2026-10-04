@@ -352,9 +352,9 @@ public class StudentEnrolledEvent extends Event {
     private void addEnrollmentMetadata() {
         addMetadata("enrollment.studentId", studentId);
         addMetadata("enrollment.courseId", courseId);
-        addMetadata("enrollment.semester", semester.toString());
+        addMetadata("enrollment.semester", Objects.toString(semester, null));
         addMetadata("enrollment.academicYear", academicYear);
-        addMetadata("enrollment.status", enrollmentStatus.toString());
+        addMetadata("enrollment.status", Objects.toString(enrollmentStatus, null));
         addMetadata("enrollment.method", enrollmentMethod);
         addMetadata("enrollment.isWaitlisted", isWaitlisted);
         addMetadata("enrollment.enrolledBy", enrolledBy);
@@ -489,10 +489,8 @@ public class StudentEnrolledEvent extends Event {
                 enrollmentMethod, previousStatus
             );
             
-            // Apply builder properties
-            event.addMetadata(metadata);
-            
-            return event;
+            // Apply builder properties (metadata, priority, correlation ID, aggregate version)
+            return applyTo(event);
         }
     }
     

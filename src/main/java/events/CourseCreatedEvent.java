@@ -294,7 +294,9 @@ public class CourseCreatedEvent extends Event {
         creation.put("createdDate", createdDate.toString());
         if (approvedBy != null) {
             creation.put("approvedBy", approvedBy);
-            creation.put("approvedDate", approvedDate.toString());
+            if (approvedDate != null) {
+                creation.put("approvedDate", approvedDate.toString());
+            }
         }
         payload.put("creation", creation);
         
@@ -465,7 +467,7 @@ public class CourseCreatedEvent extends Event {
         addMetadata("course.number", courseNumber);
         addMetadata("course.name", courseName);
         addMetadata("course.credits", credits);
-        addMetadata("course.status", status.toString());
+        addMetadata("course.status", Objects.toString(status, null));
         addMetadata("course.maxEnrollment", maxEnrollment);
         addMetadata("course.level", courseLevel);
         addMetadata("course.isOnline", isOnline);
@@ -502,9 +504,11 @@ public class CourseCreatedEvent extends Event {
      * Adds schedule metadata
      */
     private void addScheduleMetadata() {
-        addMetadata("academic.semester", semester.toString());
+        addMetadata("academic.semester", Objects.toString(semester, null));
         addMetadata("academic.academicYear", academicYear);
-        addMetadata("academic.semesterDisplay", getSemesterDisplay());
+        if (semester != null) {
+            addMetadata("academic.semesterDisplay", getSemesterDisplay());
+        }
         
         if (schedule != null) {
             // Parse schedule for more detailed metadata
@@ -688,10 +692,8 @@ public class CourseCreatedEvent extends Event {
                 catalogDescription, learningObjectives
             );
             
-            // Apply builder properties
-            event.addMetadata(metadata);
-            
-            return event;
+            // Apply builder properties (metadata, priority, correlation ID, aggregate version)
+            return applyTo(event);
         }
     }
     
