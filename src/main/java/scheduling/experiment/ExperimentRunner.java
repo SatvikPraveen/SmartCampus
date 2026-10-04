@@ -30,11 +30,17 @@ import scheduling.solver.TimetableSolver;
  * mvn -q compile exec:java -Dexec.mainClass=scheduling.experiment.ExperimentRunner \
  *     -Dexec.args="--seeds 10 --iterations 200000 --out results"
  * </pre>
+ *
+ * <p>With {@code --itc DIR} the same solvers run on the ITC-2007 post-enrolment instances
+ * {@code DIR/comp-2007-2-<i>.tim} instead (see {@link ItcExperiment}); {@code --instances}
+ * selects them, e.g. {@code 1-24} or {@code 1,5,9}, {@code --threads} solves several
+ * instances concurrently and {@code --solutions DIR} writes every timetable in the competition's
+ * {@code .sln} format for checking with the official validator.</p>
  */
 public final class ExperimentRunner {
 
-    private static final int BOOTSTRAP_RESAMPLES = 10_000;
-    private static final long BOOTSTRAP_SEED = 20251004L;
+    static final int BOOTSTRAP_RESAMPLES = 10_000;
+    static final long BOOTSTRAP_SEED = 20251004L;
 
     private ExperimentRunner() {
     }
@@ -44,17 +50,16 @@ public final class ExperimentRunner {
         int seeds = Integer.parseInt(opts.getOrDefault("seeds", "10"));
         long iterations = Long.parseLong(opts.getOrDefault("iterations", "200000"));
         Path out = Path.of(opts.getOrDefault("out", "results"));
+        if (opts.containsKey("itc")) {
+            ItcExperiment.run(Path.of(opts.get("itc")), opts.getOrDefault("instances", "1-24"),
+                    seeds, iterations, Integer.parseInt(opts.getOrDefault("threads", "1")), out,
+                    opts.containsKey("solutions") ? Path.of(opts.get("solutions")) : null);
+            return;
+        }
         List<InstanceGenerator.Params> families = families(opts.getOrDefault("sizes", "small,medium,large"));
 
         GreedySolver dsatur = new GreedySolver(GreedySolver.Ordering.DSATUR);
-        List<TimetableSolver> solvers = List.of(
-                new RandomSolver(),
-                new GreedySolver(GreedySolver.Ordering.INPUT),
-                new GreedySolver(GreedySolver.Ordering.RANDOM),
-                new GreedySolver(GreedySolver.Ordering.LARGEST_DEGREE),
-                dsatur,
-                SimulatedAnnealingSolver.descent(dsatur, iterations),
-                new SimulatedAnnealingSolver(dsatur, SimulatedAnnealingSolver.Config.defaults(iterations)));
+        List<TimetableSolver> solvers = solvers(dsatur, iterations);
 
         Files.createDirectories(out);
         List<Row> rows = new ArrayList<>();
@@ -85,6 +90,27 @@ public final class ExperimentRunner {
         Files.writeString(out.resolve("summary.md"), summary);
         System.out.println();
         System.out.println(summary);
+    }
+
+    /** The benchmarked solvers; local search starts from {@code dsatur}. */
+    static List<TimetableSolver> solvers(GreedySolver dsatur, long iterations) {
+        return List.of(
+                new RandomSolver(),
+                new GreedySolver(GreedySolver.Ordering.INPUT),
+                new GreedySolver(GreedySolver.Ordering.RANDOM),
+                new GreedySolver(GreedySolver.Ordering.LARGEST_DEGREE),
+                dsatur,
+                SimulatedAnnealingSolver.descent(dsatur, iterations),
+                new SimulatedAnnealingSolver(dsatur, SimulatedAnnealingSolver.Config.defaults(iterations)));
+    }
+
+    /** Paired comparisons reported for every instance set: {first, second}. */
+    static String[][] comparisons(String saBase) {
+        String sa = "sa(" + saBase + ")";
+        String descent = "descent(" + saBase + ")";
+        return new String[][] {
+            {sa, saBase}, {descent, saBase}, {sa, descent}, {saBase, "greedy-largest-degree"},
+            {"greedy-largest-degree", "greedy-input"}};
     }
 
     private record Row(String instance, int seed, SolverResult result) {
@@ -128,12 +154,7 @@ public final class ExperimentRunner {
             sb.append(String.format(Locale.ROOT, "%nPaired weighted-objective differences "
                     + "(negative = first solver better; 95%% bootstrap CI; exact two-sided sign test):%n%n"));
             sb.append("| comparison | mean diff | 95% CI | wins/losses/ties | sign-test p |\n|---|---:|---:|---:|---:|\n");
-            String sa = "sa(" + saBase + ")";
-            String descent = "descent(" + saBase + ")";
-            String[][] pairs = {
-                {sa, saBase}, {descent, saBase}, {sa, descent}, {saBase, "greedy-largest-degree"},
-                {"greedy-largest-degree", "greedy-input"}};
-            for (String[] pair : pairs) {
+            for (String[] pair : comparisons(saBase)) {
                 double[] a = objective(select(rows, family.name(), pair[0]));
                 double[] b = objective(select(rows, family.name(), pair[1]));
                 if (a.length == 0 || a.length != b.length) {
@@ -182,7 +203,7 @@ public final class ExperimentRunner {
         return result;
     }
 
-    private static Map<String, String> parse(String[] args) {
+    static Map<String, String> parse(String[] args) {
         Map<String, String> m = new LinkedHashMap<>();
         for (int i = 0; i < args.length; i++) {
             if (!args[i].startsWith("--") || i + 1 >= args.length) {
