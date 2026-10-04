@@ -1,106 +1,31 @@
-# Location: Dockerfile
-# SmartCampus Backend - Multi-stage Docker Build
-# This Dockerfile creates an optimized production image for the SmartCampus Backend
+# syntax=docker/dockerfile:1.6
+# Multi-stage build for the SmartCampus REST service.
 
-# Build stage
-FROM maven:3.9.5-eclipse-temurin-17-alpine AS builder
-
-# Set working directory
-WORKDIR /app
-
-# Copy Maven files for dependency caching
-COPY pom.xml ./
+FROM eclipse-temurin:21-jdk-jammy AS build
+WORKDIR /workspace
+COPY mvnw pom.xml ./
 COPY .mvn .mvn
-COPY mvnw ./
-
-# Make mvnw executable
-RUN chmod +x mvnw
-
-# Download dependencies (cached layer)
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code
+RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
 COPY src src
+RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package -DskipTests \
+    && java -Djarmode=layertools -jar target/smartcampus.jar extract --destination target/layers
 
-# Build application
-RUN ./mvnw clean package -DskipTests -B
-
-# Runtime stage
-FROM eclipse-temurin:17-jre-alpine AS runtime
-
-# Install necessary packages for production
-RUN apk add --no-cache \
-    curl \
-    tzdata \
-    dumb-init \
-    && rm -rf /var/cache/apk/*
-
-# Create application user for security
-RUN addgroup -S smartcampus && \
-    adduser -S smartcampus -G smartcampus
-
-# Set timezone
-ENV TZ=UTC
-
-# Set working directory
+FROM eclipse-temurin:21-jre-jammy AS runtime
+RUN groupadd --system app && useradd --system --gid app --home /app app
 WORKDIR /app
-
-# Copy application JAR from builder stage
-COPY --from=builder /app/target/smartcampus-backend.jar app.jar
-
-# Create necessary directories
-RUN mkdir -p /app/logs /app/uploads /app/config && \
-    chown -R smartcampus:smartcampus /app
-
-# Copy additional configuration files if they exist
-COPY --chown=smartcampus:smartcampus config/ /app/config/ 2>/dev/null || true
-
-# Switch to non-root user
-USER smartcampus
-
-# Environment variables
-ENV JAVA_OPTS="-XX:+UseContainerSupport \
-               -XX:MaxRAMPercentage=75.0 \
-               -XX:+UseG1GC \
-               -XX:+UseStringDeduplication \
-               -XX:+OptimizeStringConcat \
-               -XX:+UseCompressedOops \
-               -Djava.security.egd=file:/dev/./urandom \
-               -Dfile.encoding=UTF-8 \
-               -Duser.timezone=UTC"
-
-ENV SPRING_PROFILES_ACTIVE=prod
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
-
-# Expose port
+# Dependency layers first so application changes do not invalidate them.
+COPY --from=build /workspace/target/layers/dependencies/ ./
+COPY --from=build /workspace/target/layers/spring-boot-loader/ ./
+COPY --from=build /workspace/target/layers/snapshot-dependencies/ ./
+COPY --from=build /workspace/target/layers/application/ ./
+USER app
 EXPOSE 8080
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+# Probes: /actuator/health/liveness and /actuator/health/readiness
+ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
 
-# Use dumb-init for proper signal handling
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start application
-CMD ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
-
-# Labels for better image management
-LABEL maintainer="SmartCampus Development Team <dev-team@smartcampus.com>"
-LABEL version="1.0.0"
-LABEL description="SmartCampus Backend - Campus Management System API"
-LABEL org.opencontainers.image.title="SmartCampus Backend"
-LABEL org.opencontainers.image.description="RESTful API for comprehensive campus management"
-LABEL org.opencontainers.image.version="1.0.0"
-LABEL org.opencontainers.image.vendor="SmartCampus"
-LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.source="https://github.com/smartcampus/smartcampus-backend"
-LABEL org.opencontainers.image.documentation="https://docs.smartcampus.com"
-
-# Development stage (optional - for development with hot reload)
-FROM runtime AS development
-USER root
-RUN apk add --no-cache maven
-USER smartcampus
-ENV SPRING_PROFILES_ACTIVE=dev
-ENV SPRING_DEVTOOLS_RESTART_ENABLED=true
-CMD ["sh", "-c", "java $JAVA_OPTS -Dspring.devtools.restart.enabled=true -jar app.jar"]
+LABEL org.opencontainers.image.title="SmartCampus" \
+      org.opencontainers.image.description="Course timetabling REST service" \
+      org.opencontainers.image.source="https://github.com/SatvikPraveen/SmartCampus" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.authors="Satvik Praveen"
