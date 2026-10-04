@@ -14,6 +14,7 @@ import utils.ValidationUtil;
 import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.Arrays;
+import java.util.NoSuchElementException;
 import java.util.Scanner;
 
 /**
@@ -340,6 +341,9 @@ public class App {
                 }
             } catch (NumberFormatException e) {
                 System.out.println("Please enter a valid number.\n");
+            } catch (NoSuchElementException e) {
+                // Input stream exhausted (EOF): nothing more can be read, so leave the menu
+                running = false;
             } catch (Exception e) {
                 System.out.println("Error: " + e.getMessage() + "\n");
             }
