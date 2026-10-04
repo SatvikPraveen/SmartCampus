@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-10-04
+
+### Fixed
+- `EventBus` counted an event once per failing handler, so its failure rate could exceed
+  100%; failures and successes are now counted per event
+- `AsyncNotificationSender` and `EnrollmentProcessor` dropped work still queued at
+  `shutdown()`; the queue is now drained first and new work after shutdown is rejected
+- `EnrollmentProcessor.processEnrollmentWithTimeout` reported a timeout but let the
+  enrollment go through later; a timed-out enrollment is now cancelled
+- `BatchProcessor` released a semaphore permit it never acquired when interrupted,
+  raising its concurrency limit
+- `CommandProcessor` gave every command its own empty service, so updates and deletes
+  could not see earlier creates; a processor's commands now share one set of services
+- `CrudException(operation, "id", message)` bound a String id to the entity-type
+  constructor; entity-type exceptions now use `CrudException.forEntityType(...)`
+- `ModelInspector.validateObject` applied no rules and skipped fields with repeated
+  `@Validator` annotations; `@Validator` rules are now implemented once in
+  `ValidationRules` and shared with `AnnotationProcessor`
+- The `@Cacheable` proxy interceptor never cached anything; it now caches per method,
+  honouring `ttl`, `maxEntries` (LRU) and `cacheNullValues`
+
 ## [2.0.0] - 2026-10-04
 
 This release turns a code base that had never compiled into a building, tested and

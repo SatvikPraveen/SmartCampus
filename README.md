@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21_LTS-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3.5](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F.svg)](https://spring.io/projects/spring-boot)
-[![Tests](https://img.shields.io/badge/tests-4%2C150_passing-25A162.svg)](#testing-and-quality)
+[![Tests](https://img.shields.io/badge/tests-4%2C171_passing-25A162.svg)](#testing-and-quality)
 [![Reproducible](https://img.shields.io/badge/benchmarks-seeded_%26_paired-8A2BE2.svg)](docs/research/timetabling.md)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-lightgrey.svg)](CITATION.cff)
 
@@ -293,13 +293,13 @@ SmartCampus/
 | REST API | `@SpringBootTest` + MockMvc covering the HTTP contract, validation errors and health |
 | Domain library | Unit tests for every domain package (services, models, io, events, concurrent, patterns, reflection, exceptions, utilities, security, repositories), written as regression tests for the bugs they exposed; concurrency tests synchronise on latches and timeouts, filesystem tests run in `@TempDir` |
 
-Current suite: **4,150 tests, 0 failures**. Line coverage by package (JaCoCo):
+Current suite: **4,171 tests, 0 failures**. Line coverage by package (JaCoCo):
 
 | ≥ 90% | 80–90% | < 80% |
 |---|---|---|
-| interfaces 100%, exceptions 99.8%, events 99%, services 98%, scheduling.io 100%, scheduling.model 98%, scheduling.eval 98%, scheduling.solver 98%, reflection 96%, api 96%, utils 96%, app 95%, repositories 95%, patterns 95%, cache 94%, io 93%, concurrent 92% | functional 87%, enums 86%, models 86%, security 81% | scheduling.experiment 76% (benchmark runner, also exercised by the CI smoke run) |
+| interfaces 100%, exceptions 99.8%, events 99%, services 98%, scheduling.io 100%, scheduling.model 98%, scheduling.eval 98%, scheduling.solver 98%, api 96%, utils 96%, app 95%, repositories 95%, patterns 95%, cache 94%, io 93%, concurrent 92%, reflection 92% | functional 87%, enums 86%, models 86%, security 81% | scheduling.experiment 76% (benchmark runner, also exercised by the CI smoke run) |
 
-Overall line coverage is 94%. Writing the tests uncovered and fixed more than 170 defects,
+Overall line coverage is 94%. Writing the tests uncovered and fixed more than 175 defects,
 including an always-failing token manager, a forged-token revocation path, a deadlock in the
 LRU cache views, grade conversions that returned the wrong scale, thread pools that deadlocked
 on their own sub-tasks (`EventBus`, `BatchProcessor`, `DataSyncManager`, `BackupManager`),
