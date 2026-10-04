@@ -18,7 +18,7 @@ import java.util.logging.Formatter;
  */
 public class LogManager {
     
-    private static LogManager instance;
+    private static volatile LogManager instance;
     private static final Object instanceLock = new Object();
     
     // Logging configuration
@@ -70,13 +70,28 @@ public class LogManager {
     private void loadConfiguration() {
         this.logDirectory = ConfigManager.LoggingConfig.getLogDirectory();
         this.logFileName = ConfigManager.LoggingConfig.getLogFileName();
-        this.logLevel = Level.parse(ConfigManager.LoggingConfig.getLogLevel());
+        this.logLevel = parseLevel(ConfigManager.LoggingConfig.getLogLevel());
         this.maxFileSize = ConfigManager.LoggingConfig.getMaxFileSize();
         this.maxBackupIndex = ConfigManager.LoggingConfig.getMaxBackupIndex();
         this.consoleLoggingEnabled = ConfigManager.LoggingConfig.isConsoleLoggingEnabled();
         this.fileLoggingEnabled = true; // Always enable file logging
         this.asyncLoggingEnabled = false; // Default to synchronous
         this.logPattern = ConfigManager.LoggingConfig.getLogPattern();
+    }
+    
+    /**
+     * Parse a configured level. Accepts the common names that ConfigManager validates
+     * (DEBUG, WARN, ERROR, FATAL, TRACE) in addition to java.util.logging level names.
+     */
+    private static Level parseLevel(String name) {
+        switch (name.trim().toUpperCase()) {
+            case "TRACE": return Level.FINEST;
+            case "DEBUG": return Level.FINE;
+            case "WARN": return Level.WARNING;
+            case "ERROR":
+            case "FATAL": return Level.SEVERE;
+            default: return Level.parse(name.trim().toUpperCase());
+        }
     }
     
     /**
@@ -147,7 +162,8 @@ public class LogManager {
                     LocalDateTime.now().format(formatter),
                     record.getLevel(),
                     record.getLoggerName(),
-                    formatMessage(record).replace("\"", "\\\""),
+                    formatMessage(record).replace("\\", "\\\\").replace("\"", "\\\"")
+                        .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t"),
                     Thread.currentThread().getName()
                 );
             }
@@ -291,7 +307,9 @@ public class LogManager {
         String loggerName = getCallerClassName();
         long timestamp = System.currentTimeMillis();
         
-        LogEntry entry = new LogEntry(level, message, loggerName, timestamp, throwable, params);
+        // Messages use "{}" placeholders, which java.util.logging does not understand: substitute them here
+        LogEntry entry = new LogEntry(level, substitutePlaceholders(message, params), loggerName,
+                                      timestamp, throwable, null);
         logEntryCount.incrementAndGet();
         
         if (asyncLoggingEnabled) {
@@ -308,6 +326,24 @@ public class LogManager {
     }
     
     /**
+     * Replace each "{}" placeholder in the message, in order, with the corresponding parameter
+     */
+    private static String substitutePlaceholders(String message, Object[] params) {
+        if (message == null || params == null || params.length == 0) {
+            return message;
+        }
+        StringBuilder sb = new StringBuilder(message.length() + 16 * params.length);
+        int paramIndex = 0;
+        int from = 0;
+        int at;
+        while (paramIndex < params.length && (at = message.indexOf("{}", from)) >= 0) {
+            sb.append(message, from, at).append(params[paramIndex++]);
+            from = at + 2;
+        }
+        return sb.append(message, from, message.length()).toString();
+    }
+    
+    /**
      * Get caller class name for logging context
      */
     private String getCallerClassName() {
@@ -315,7 +351,8 @@ public class LogManager {
         // Skip LogManager methods and find the actual caller
         for (int i = 3; i < stackTrace.length; i++) {
             String className = stackTrace[i].getClassName();
-            if (!className.startsWith("io.LogManager")) {
+            if (!className.equals(LogManager.class.getName())
+                    && !className.startsWith(LogManager.class.getName() + "$")) {
                 return className;
             }
         }
@@ -483,11 +520,19 @@ public class LogManager {
     }
     
     /**
+     * Path of the file currently being written. With more than one generation, FileHandler appends
+     * the generation number to the pattern, so the active file is "<logFileName>.0".
+     */
+    private Path currentLogFile() {
+        return Paths.get(logDirectory, maxBackupIndex > 1 ? logFileName + ".0" : logFileName);
+    }
+    
+    /**
      * Get current log file size
      */
     private long getCurrentLogFileSize() {
         try {
-            Path logFile = Paths.get(logDirectory, logFileName);
+            Path logFile = currentLogFile();
             if (Files.exists(logFile)) {
                 return Files.size(logFile);
             }
@@ -508,7 +553,8 @@ public class LogManager {
             
             long cutoffTime = System.currentTimeMillis() - (daysOld * 24L * 60 * 60 * 1000);
             
-            Files.list(logDir)
+            try (var files = Files.list(logDir)) {
+              files
                  .filter(Files::isRegularFile)
                  .filter(path -> path.getFileName().toString().endsWith(".log"))
                  .filter(path -> {
@@ -527,6 +573,7 @@ public class LogManager {
                          error("Failed to archive log file: {}", e, path.getFileName());
                      }
                  });
+            }
                  
         } catch (IOException e) {
             error("Failed to archive old logs", e);
@@ -541,7 +588,8 @@ public class LogManager {
             Path logDir = Paths.get(logDirectory);
             long cutoffTime = System.currentTimeMillis() - (daysOld * 24L * 60 * 60 * 1000);
             
-            Files.list(logDir)
+            try (var files = Files.list(logDir)) {
+              files
                  .filter(Files::isRegularFile)
                  .filter(path -> path.getFileName().toString().contains("log"))
                  .filter(path -> {
@@ -559,6 +607,7 @@ public class LogManager {
                          error("Failed to delete log file: {}", e, path.getFileName());
                      }
                  });
+            }
                  
         } catch (IOException e) {
             error("Failed to cleanup old logs", e);
@@ -571,7 +620,7 @@ public class LogManager {
     public void exportLogs(LocalDateTime startDate, LocalDateTime endDate, Path exportFile) {
         try {
             List<String> exportedLogs = new ArrayList<>();
-            Path logFile = Paths.get(logDirectory, logFileName);
+            Path logFile = currentLogFile();
             
             if (Files.exists(logFile)) {
                 List<String> lines = Files.readAllLines(logFile);
@@ -600,7 +649,7 @@ public class LogManager {
         List<String> results = new ArrayList<>();
         
         try {
-            Path logFile = Paths.get(logDirectory, logFileName);
+            Path logFile = currentLogFile();
             
             if (Files.exists(logFile)) {
                 List<String> lines = Files.readAllLines(logFile);
@@ -631,7 +680,7 @@ public class LogManager {
         List<String> errorMessages = new ArrayList<>();
         
         try {
-            Path logFile = Paths.get(logDirectory, logFileName);
+            Path logFile = currentLogFile();
             
             if (Files.exists(logFile)) {
                 List<String> lines = Files.readAllLines(logFile);
