@@ -18,7 +18,8 @@ public class EventBus {
     // Event bus configuration
     private final String busName;
     private final boolean asyncByDefault;
-    private final ExecutorService executorService;
+    private final int threadPoolSize;
+    private volatile ExecutorService executorService;
     private final int maxRetries;
     private final long retryDelayMs;
     
@@ -36,6 +37,7 @@ public class EventBus {
     private final AtomicLong eventsPublished;
     private final AtomicLong eventsProcessed;
     private final AtomicLong eventsFailed;
+    private final AtomicLong eventsInFlight = new AtomicLong(0);
     private final Map<String, AtomicLong> eventTypeStats;
     private final Map<String, AtomicLong> handlerStats;
     
@@ -215,12 +217,8 @@ public class EventBus {
                    int maxRetries, long retryDelayMs, int maxDeadLetterSize) {
         this.busName = busName;
         this.asyncByDefault = asyncByDefault;
-        this.executorService = Executors.newFixedThreadPool(threadPoolSize,
-            r -> {
-                Thread t = new Thread(r, "EventBus-" + busName + "-Thread");
-                t.setDaemon(true);
-                return t;
-            });
+        this.threadPoolSize = threadPoolSize;
+        this.executorService = createExecutor();
         this.maxRetries = maxRetries;
         this.retryDelayMs = retryDelayMs;
         this.maxDeadLetterSize = maxDeadLetterSize;
@@ -240,6 +238,15 @@ public class EventBus {
         this.handlerStats = new ConcurrentHashMap<>();
         
         this.isRunning = true;
+    }
+    
+    private ExecutorService createExecutor() {
+        return Executors.newFixedThreadPool(threadPoolSize,
+            r -> {
+                Thread t = new Thread(r, "EventBus-" + busName + "-Thread");
+                t.setDaemon(true);
+                return t;
+            });
     }
     
     // ==================== EVENT PUBLISHING ====================
@@ -264,13 +271,24 @@ public class EventBus {
         }
         
         eventsPublished.incrementAndGet();
+        eventsInFlight.incrementAndGet();
         updateEventTypeStats(event.getEventType());
         
-        return CompletableFuture.runAsync(() -> processEvent(event), executorService)
+        // processEvent returns a future for its async handlers instead of blocking a pool
+        // thread on them, so async handlers cannot starve the (bounded) pool and deadlock.
+        CompletableFuture<Void> processing;
+        try {
+            processing = CompletableFuture.supplyAsync(() -> processEvent(event), executorService)
+                .thenCompose(f -> f);
+        } catch (RejectedExecutionException e) {
+            processing = CompletableFuture.failedFuture(e);
+        }
+        return processing
             .exceptionally(throwable -> {
                 handleEventProcessingError(event, throwable, 0);
                 return null;
-            });
+            })
+            .whenComplete((v, t) -> eventsInFlight.decrementAndGet());
     }
     
     /**
@@ -293,7 +311,7 @@ public class EventBus {
         updateEventTypeStats(event.getEventType());
         
         try {
-            processEvent(event);
+            processEvent(event).join();
         } catch (Exception e) {
             handleEventProcessingError(event, e, 0);
             throw new RuntimeException("Failed to process event synchronously", e);
@@ -418,23 +436,25 @@ public class EventBus {
     public boolean unsubscribe(String handlerId) {
         if (handlerId == null) return false;
         
+        boolean removed = false;
+        
         // Remove from event type handlers
         for (List<EventHandler> handlers : eventHandlers.values()) {
-            handlers.removeIf(handler -> handlerId.equals(handler.getHandlerId()));
+            removed |= handlers.removeIf(handler -> handlerId.equals(handler.getHandlerId()));
         }
         
         // Remove from type handlers
         for (List<EventHandler> handlers : typeHandlers.values()) {
-            handlers.removeIf(handler -> handlerId.equals(handler.getHandlerId()));
+            removed |= handlers.removeIf(handler -> handlerId.equals(handler.getHandlerId()));
         }
         
         // Remove from global handlers
-        globalHandlers.removeIf(handler -> handlerId.equals(handler.getHandlerId()));
+        removed |= globalHandlers.removeIf(handler -> handlerId.equals(handler.getHandlerId()));
         
         // Remove stats
         handlerStats.remove(handlerId);
         
-        return true;
+        return removed;
     }
     
     // ==================== EVENT FILTERS ====================
@@ -465,11 +485,11 @@ public class EventBus {
     /**
      * Processes an event by sending it to all matching handlers
      */
-    private void processEvent(Event event) {
+    private CompletableFuture<Void> processEvent(Event event) {
         // Apply global filters
         for (EventFilter filter : eventFilters.values()) {
             if (!filter.getPredicate().test(event)) {
-                return; // Event filtered out
+                return CompletableFuture.completedFuture(null); // Event filtered out
             }
         }
         
@@ -512,12 +532,9 @@ public class EventBus {
             }
         }
         
-        // Wait for async tasks to complete
-        if (!asyncTasks.isEmpty()) {
-            CompletableFuture.allOf(asyncTasks.toArray(new CompletableFuture[0])).join();
-        }
-        
-        eventsProcessed.incrementAndGet();
+        // Complete once all async tasks are done (without blocking the current thread)
+        return CompletableFuture.allOf(asyncTasks.toArray(new CompletableFuture[0]))
+            .thenRun(eventsProcessed::incrementAndGet);
     }
     
     /**
@@ -526,18 +543,21 @@ public class EventBus {
     private void executeHandler(EventHandler handler, Event event) {
         try {
             handler.getHandler().accept(event);
-            handler.incrementProcessed();
-            
-            AtomicLong handlerCount = handlerStats.get(handler.getHandlerId());
-            if (handlerCount != null) {
-                handlerCount.incrementAndGet();
-            }
+            recordHandlerSuccess(handler);
         } catch (Exception e) {
             handler.incrementFailed();
             eventsFailed.incrementAndGet();
             
             // Log error and potentially retry
             handleHandlerError(handler, event, e, 1);
+        }
+    }
+    
+    private void recordHandlerSuccess(EventHandler handler) {
+        handler.incrementProcessed();
+        AtomicLong handlerCount = handlerStats.get(handler.getHandlerId());
+        if (handlerCount != null) {
+            handlerCount.incrementAndGet();
         }
     }
     
@@ -551,7 +571,7 @@ public class EventBus {
                 .execute(() -> {
                     try {
                         handler.getHandler().accept(event);
-                        handler.incrementProcessed();
+                        recordHandlerSuccess(handler);
                     } catch (Exception retryError) {
                         handleHandlerError(handler, event, retryError, attemptCount + 1);
                     }
@@ -678,6 +698,10 @@ public class EventBus {
     public void start() {
         synchronized (lifecycleLock) {
             if (!isRunning) {
+                // The executor is shut down by stop(); a restarted bus needs a fresh one
+                if (executorService.isShutdown()) {
+                    executorService = createExecutor();
+                }
                 isRunning = true;
             }
         }
@@ -728,7 +752,7 @@ public class EventBus {
         long startTime = System.currentTimeMillis();
         
         while (System.currentTimeMillis() - startTime < timeoutMs) {
-            if (eventsPublished.get() == eventsProcessed.get() + eventsFailed.get()) {
+            if (eventsInFlight.get() == 0) {
                 return true;
             }
             
