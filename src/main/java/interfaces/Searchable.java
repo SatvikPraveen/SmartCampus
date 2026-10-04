@@ -308,7 +308,7 @@ public interface Searchable<T> {
         
         public boolean isEmpty() { return results.isEmpty(); }
         public boolean isFirstPage() { return page == 0; }
-        public boolean isLastPage() { return page == totalPages - 1; }
+        public boolean isLastPage() { return page >= totalPages - 1; }
         
         @Override
         public String toString() {

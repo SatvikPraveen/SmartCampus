@@ -224,7 +224,7 @@ public interface EventListener<T> {
             this.source = source;
             this.timestamp = LocalDateTime.now();
             this.metadata = Map.of();
-            this.priority = priority;
+            this.priority = priority != null ? priority : EventPriority.NORMAL;
             this.correlationId = null;
             this.userId = null;
             this.cancelled = false;

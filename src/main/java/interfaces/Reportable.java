@@ -215,9 +215,9 @@ public interface Reportable {
             this.reportId = reportId;
             this.reportType = reportType;
             this.title = title;
-            this.columns = columns;
-            this.rows = rows;
-            this.metadata = metadata;
+            this.columns = columns != null ? columns : List.of();
+            this.rows = rows != null ? rows : List.of();
+            this.metadata = metadata != null ? metadata : Map.of();
             this.generatedAt = LocalDateTime.now();
             this.content = "";
         }
