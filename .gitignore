@@ -208,3 +208,6 @@ yarn-error.log*
 /api-docs/generated/
 # Claude Code local worktrees
 .claude/
+
+# Benchmark data sets fetched by scripts/ (not redistributable)
+data/
