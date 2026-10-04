@@ -40,12 +40,27 @@ public class DatabaseConnection {
     // Connection history for debugging
     private final Queue<ConnectionAttempt> connectionHistory = new LinkedList<>();
     private static final int MAX_HISTORY_SIZE = 100;
+    private static final int DEFAULT_CONNECTION_TIMEOUT = 30000;
     
     /**
      * Private constructor to prevent direct instantiation
      */
     private DatabaseConnection() {
         loadConfiguration();
+        initializeDriver();
+    }
+
+    /**
+     * Explicitly configured connection (used by {@link DatabaseConnectionFactory}); does not read
+     * the global configuration and initializes the supplied driver rather than the configured one.
+     */
+    private DatabaseConnection(String jdbcUrl, String username, String password, String driverClassName) {
+        this.jdbcUrl = jdbcUrl;
+        this.username = username;
+        this.password = password;
+        this.driverClassName = driverClassName;
+        this.connectionTimeout = DEFAULT_CONNECTION_TIMEOUT;
+        this.autoCommit = true;
         initializeDriver();
     }
     
@@ -118,8 +133,8 @@ public class DatabaseConnection {
             
             // Create new connection with timeout
             Properties props = new Properties();
-            props.setProperty("user", username);
-            props.setProperty("password", password);
+            props.setProperty("user", username != null ? username : "");
+            props.setProperty("password", password != null ? password : "");
             props.setProperty("connectTimeout", String.valueOf(connectionTimeout));
             props.setProperty("socketTimeout", String.valueOf(connectionTimeout));
             
@@ -501,12 +516,7 @@ public class DatabaseConnection {
          * Create connection for testing with in-memory database
          */
         public static DatabaseConnection createTestConnection() {
-            DatabaseConnection conn = new DatabaseConnection();
-            conn.jdbcUrl = "jdbc:h2:mem:testdb";
-            conn.username = "sa";
-            conn.password = "";
-            conn.driverClassName = "org.h2.Driver";
-            return conn;
+            return new DatabaseConnection("jdbc:h2:mem:testdb", "sa", "", "org.h2.Driver");
         }
         
         /**
@@ -514,12 +524,7 @@ public class DatabaseConnection {
          */
         public static DatabaseConnection createConnection(String url, String user, 
                                                         String pass, String driver) {
-            DatabaseConnection conn = new DatabaseConnection();
-            conn.jdbcUrl = url;
-            conn.username = user;
-            conn.password = pass;
-            conn.driverClassName = driver;
-            return conn;
+            return new DatabaseConnection(url, user, pass, driver);
         }
     }
     
@@ -543,10 +548,14 @@ public class DatabaseConnection {
                 errors.add("Username is required");
             }
             
-            try {
-                Class.forName(driverClass);
-            } catch (ClassNotFoundException e) {
-                errors.add("Driver class not found: " + driverClass);
+            if (driverClass == null || driverClass.trim().isEmpty()) {
+                errors.add("Driver class is required");
+            } else {
+                try {
+                    Class.forName(driverClass);
+                } catch (ClassNotFoundException e) {
+                    errors.add("Driver class not found: " + driverClass);
+                }
             }
             
             // Test connection if configuration is valid
