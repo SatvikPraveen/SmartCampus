@@ -62,7 +62,7 @@ public class CsvProcessor {
     public static List<Student> readStudents(Path csvFile, Map<String, Department> departmentMap) 
             throws IOException, ParseException {
         
-        List<String> lines = Files.readAllLines(csvFile, StandardCharsets.UTF_8);
+        List<String> lines = readRecords(csvFile);
         if (lines.isEmpty()) {
             return new ArrayList<>();
         }
@@ -96,7 +96,7 @@ public class CsvProcessor {
     public static List<Professor> readProfessors(Path csvFile, Map<String, Department> departmentMap) 
             throws IOException, ParseException {
         
-        List<String> lines = Files.readAllLines(csvFile, StandardCharsets.UTF_8);
+        List<String> lines = readRecords(csvFile);
         if (lines.isEmpty()) {
             return new ArrayList<>();
         }
@@ -130,7 +130,7 @@ public class CsvProcessor {
                                          Map<String, Professor> professorMap) 
             throws IOException, ParseException {
         
-        List<String> lines = Files.readAllLines(csvFile, StandardCharsets.UTF_8);
+        List<String> lines = readRecords(csvFile);
         if (lines.isEmpty()) {
             return new ArrayList<>();
         }
@@ -161,7 +161,7 @@ public class CsvProcessor {
      * Read departments from CSV file
      */
     public static List<Department> readDepartments(Path csvFile) throws IOException, ParseException {
-        List<String> lines = Files.readAllLines(csvFile, StandardCharsets.UTF_8);
+        List<String> lines = readRecords(csvFile);
         if (lines.isEmpty()) {
             return new ArrayList<>();
         }
@@ -195,7 +195,7 @@ public class CsvProcessor {
                                                   Map<String, Course> courseMap) 
             throws IOException, ParseException {
         
-        List<String> lines = Files.readAllLines(csvFile, StandardCharsets.UTF_8);
+        List<String> lines = readRecords(csvFile);
         if (lines.isEmpty()) {
             return new ArrayList<>();
         }
@@ -229,7 +229,7 @@ public class CsvProcessor {
                                        Map<String, Course> courseMap) 
             throws IOException, ParseException {
         
-        List<String> lines = Files.readAllLines(csvFile, StandardCharsets.UTF_8);
+        List<String> lines = readRecords(csvFile);
         if (lines.isEmpty()) {
             return new ArrayList<>();
         }
@@ -557,7 +557,31 @@ public class CsvProcessor {
     }
     
     // Utility methods for CSV processing
-    
+
+    /**
+     * Read the logical CSV records of a file. A quoted value may contain line breaks (the writers
+     * quote such values), so physical lines are joined while a quoted value is still open.
+     */
+    private static List<String> readRecords(Path csvFile) throws IOException {
+        List<String> records = new ArrayList<>();
+        StringBuilder pending = null;
+        for (String line : Files.readAllLines(csvFile, StandardCharsets.UTF_8)) {
+            if (pending == null) {
+                pending = new StringBuilder(line);
+            } else {
+                pending.append('\n').append(line);
+            }
+            if (pending.chars().filter(ch -> ch == '"').count() % 2 == 0) {
+                records.add(pending.toString());
+                pending = null;
+            }
+        }
+        if (pending != null) {
+            records.add(pending.toString()); // unterminated quote: keep what we have
+        }
+        return records;
+    }
+
     /**
      * Parse CSV line handling quoted values and commas within quotes
      */
@@ -597,12 +621,19 @@ public class CsvProcessor {
      * Escape CSV value by adding quotes if necessary
      */
     private static String escapeCsvValue(String value) {
+        return escapeCsvValue(value, CSV_DELIMITER);
+    }
+
+    /**
+     * Escape CSV value for the given delimiter by adding quotes if necessary
+     */
+    private static String escapeCsvValue(String value, String delimiter) {
         if (value == null) {
             return "";
         }
-        
-        // If value contains comma, quote, or newline, wrap in quotes
-        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+
+        // If value contains the delimiter, quote, or newline, wrap in quotes
+        if (value.contains(delimiter) || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
             // Escape existing quotes by doubling them
             String escapedValue = value.replace("\"", "\"\"");
             return "\"" + escapedValue + "\"";
@@ -777,7 +808,7 @@ public class CsvProcessor {
         
         for (String[] row : data) {
             String[] escapedRow = Arrays.stream(row)
-                    .map(CsvProcessor::escapeCsvValue)
+                    .map(value -> escapeCsvValue(value, delimiter))
                     .toArray(String[]::new);
             lines.add(String.join(delimiter, escapedRow));
         }
