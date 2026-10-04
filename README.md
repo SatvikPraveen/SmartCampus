@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21_LTS-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3.5](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F.svg)](https://spring.io/projects/spring-boot)
-[![Tests](https://img.shields.io/badge/tests-1%2C980_passing-25A162.svg)](#testing-and-quality)
+[![Tests](https://img.shields.io/badge/tests-4%2C107_passing-25A162.svg)](#testing-and-quality)
 [![Reproducible](https://img.shields.io/badge/benchmarks-seeded_%26_paired-8A2BE2.svg)](docs/research/timetabling.md)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-lightgrey.svg)](CITATION.cff)
 
@@ -251,19 +251,20 @@ SmartCampus/
 | Solvers | Determinism per seed, feasibility on easy instances, beats the random baseline, local search never worse than its start |
 | Statistics | Analytic checks: bootstrap reproducibility, sign-test binomial tails |
 | REST API | `@SpringBootTest` + MockMvc covering the HTTP contract, validation errors and health |
-| Domain library | Unit tests for services, models, utilities, security and repositories, written as regression tests for the bugs they exposed |
+| Domain library | Unit tests for every domain package (services, models, io, events, concurrent, patterns, reflection, exceptions, utilities, security, repositories), written as regression tests for the bugs they exposed; concurrency tests synchronise on latches and timeouts, filesystem tests run in `@TempDir` |
 
-Current suite: **1,980 tests, 0 failures**. Line coverage by package (JaCoCo):
+Current suite: **4,107 tests, 0 failures**. Line coverage by package (JaCoCo):
 
-| ≥ 90% | 70–90% | < 50% (not yet tested) |
+| ≥ 90% | 80–90% | < 80% |
 |---|---|---|
-| scheduling.model 96%, scheduling.solver 97%, scheduling.eval 93%, api 96%, utils 96%, repositories 95%, cache 94% | functional 87%, enums 86%, security 81%, models 73% | services 40%, io, patterns, concurrent, reflection, events, app: 0% |
+| interfaces 100%, exceptions 99.8%, events 99%, services 98%, scheduling.solver 97%, reflection 96%, scheduling.model 96%, api 96%, utils 96%, app 95%, repositories 95%, patterns 95%, cache 94%, io 93%, scheduling.eval 93%, concurrent 92% | functional 87%, enums 86%, models 86%, security 81% | scheduling.experiment 52% (benchmark runner, exercised by the CI smoke run) |
 
-Overall line coverage is 41%. The untested packages are the clearest next step for
-contributors. Writing the existing tests uncovered and fixed more than 70 defects, including
-an always-failing token manager, a forged-token revocation path, a deadlock in the LRU cache
-views and grade conversions that returned the wrong scale. Each fix is documented in its
-commit message and pinned by a regression test.
+Overall line coverage is 93%. Writing the tests uncovered and fixed more than 170 defects,
+including an always-failing token manager, a forged-token revocation path, a deadlock in the
+LRU cache views, grade conversions that returned the wrong scale, thread pools that deadlocked
+on their own sub-tasks (`EventBus`, `BatchProcessor`, `DataSyncManager`, `BackupManager`),
+broken database transactions and a zip-slip path in backup restore. Each fix is documented in
+its commit message and pinned by a regression test.
 
 `./mvnw verify` runs everything and enforces an **85% line-coverage floor** on the engine's
 model, evaluation and solver packages through JaCoCo. The report is written to

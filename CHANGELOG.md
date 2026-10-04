@@ -25,9 +25,10 @@ documented project, and adds a course-timetabling research engine.
 - Maven wrapper, layered non-root Docker image, CI (build, tests, coverage gate, benchmark smoke run,
   Docker smoke test), CodeQL and release workflows,
   Dependabot, issue and PR templates
-- Test suite of 1,980 tests covering the scheduling engine, the API and the domain packages
-  (models, enums, services, utils, cache, security, repositories, functional), with a JaCoCo
-  coverage gate on the engine
+- Test suite of 4,107 tests covering the scheduling engine, the API and every domain package
+  (models, enums, services, io, events, concurrent, patterns, reflection, exceptions,
+  interfaces, utils, cache, security, repositories, functional, app), 93% overall line
+  coverage, with a JaCoCo coverage gate on the engine
 
 ### Fixed
 - ~830 compilation errors across the domain library: consumer code assumed an object graph
@@ -36,12 +37,16 @@ documented project, and adds a course-timetabling research engine.
 - `getCurrentSemester()` in three classes always returned `"Fall"` (`||` instead of `&&`)
 - Application class could not start (JPA repositories enabled for a nonexistent package,
   undefined auditor bean)
-- More than 70 behavioural defects found by the new test suites, each pinned by a regression
+- More than 170 behavioural defects found by the new test suites, each pinned by a regression
   test. Highlights: `TokenManager` could not be constructed and no token ever validated, and a
   forged token could revoke a genuine one; `SecurityManager` double-counted failed logins;
   `LRUCache` key/value/entry views deadlocked; `GradeLevel.fromPercentage` mapped 85% to an
   honours grade; `SecurityUtil.sanitizeForSQL` skipped four of its six escapes; several
-  services lost a student's seat on a failed transfer or allowed duplicate enrolment
+  services lost a student's seat on a failed transfer or allowed duplicate enrolment;
+  `EventBus`, `BatchProcessor`, `DataSyncManager` and `BackupManager` deadlocked waiting on
+  sub-tasks queued to their own pools; `DatabaseManager` transactions could never commit;
+  backup restore and zip extraction allowed zip slip; `DynamicProxy` ran only the first
+  interceptor and returned another instance's proxy
 
 ### Removed
 - Dependencies with no code using them: Spring Data JPA, Security, Redis, Mail, Flyway,
