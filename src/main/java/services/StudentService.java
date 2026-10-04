@@ -289,8 +289,8 @@ public class StudentService implements Searchable<Student>, Reportable {
         Map<String, Object> statistics = new HashMap<>();
         statistics.put("totalStudents", students.size());
         statistics.put("averageGPA", gpaStats.getAverage());
-        statistics.put("minGPA", gpaStats.getMin());
-        statistics.put("maxGPA", gpaStats.getMax());
+        statistics.put("minGPA", gpas.isEmpty() ? 0.0 : gpaStats.getMin());
+        statistics.put("maxGPA", gpas.isEmpty() ? 0.0 : gpaStats.getMax());
         statistics.put("medianGPA", calculateMedian(gpas));
         statistics.put("standardDeviationGPA", calculateStandardDeviation(gpas));
         statistics.put("enrollmentByMajor", getEnrollmentStatisticsByMajor());

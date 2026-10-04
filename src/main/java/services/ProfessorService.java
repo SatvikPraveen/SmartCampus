@@ -55,7 +55,7 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
         this.teachingRatings = new ConcurrentHashMap<>();
         this.researchPublications = new ConcurrentHashMap<>();
         this.cachedStatistics = new HashMap<>();
-        this.lastStatisticsUpdate = LocalDateTime.now();
+        this.lastStatisticsUpdate = null; // nothing cached yet
     }
     
     // Core CRUD operations
@@ -281,7 +281,7 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
             // Remove associated grades
             Map<String, Grade> professorGradeMap = professorGrades.get(professorId);
             if (professorGradeMap != null) {
-                professorGradeMap.remove(courseId);
+                professorGradeMap.entrySet().removeIf(entry -> isGradeEntryForCourse(entry, courseId));
             }
             invalidateStatisticsCache();
             return true;
@@ -426,8 +426,8 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
         Map<String, Object> statistics = new HashMap<>();
         statistics.put("totalProfessors", professors.size());
         statistics.put("averageRating", ratingStats.getAverage());
-        statistics.put("minRating", ratingStats.getMin());
-        statistics.put("maxRating", ratingStats.getMax());
+        statistics.put("minRating", ratings.isEmpty() ? 0.0 : ratingStats.getMin());
+        statistics.put("maxRating", ratings.isEmpty() ? 0.0 : ratingStats.getMax());
         statistics.put("medianRating", calculateMedian(ratings));
         statistics.put("tenuredCount", getTenuredCount());
         statistics.put("professorsByDepartment", getTeachingStatisticsByDepartment());
@@ -528,7 +528,7 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
         Map<String, Grade> courseGrades = professorGrades.get(professorId);
         if (courseGrades != null) {
             return courseGrades.entrySet().stream()
-                    .filter(entry -> entry.getKey().startsWith(courseId + "_"))
+                    .filter(entry -> isGradeEntryForCourse(entry, courseId))
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList());
         }
@@ -544,7 +544,7 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
      */
     public OptionalDouble calculateCourseAverageGrade(String professorId, String courseId) {
         return getCourseGrades(professorId, courseId).stream()
-                .filter(grade -> grade.getPercentage() >= 0)
+                .filter(grade -> grade.getPointsEarned() >= 0) // ungraded work has pointsEarned == -1
                 .mapToDouble(Grade::getPercentage)
                 .average();
     }
@@ -788,6 +788,14 @@ public class ProfessorService implements Searchable<Professor>, Reportable {
     }
     
     // Helper methods
+    
+    /**
+     * Grades are keyed as {@code courseId + "_" + gradeId}; match the exact course so that
+     * e.g. course "CS1" does not pick up grades stored for course "CS1_LAB".
+     */
+    private static boolean isGradeEntryForCourse(Map.Entry<String, Grade> entry, String courseId) {
+        return entry.getKey().equals(courseId + "_" + entry.getValue().getGradeId());
+    }
     
     /**
      * Check if professor is teaching a specific course.
