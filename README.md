@@ -75,8 +75,37 @@ What the evidence supports:
    not reduced by relocate/swap moves. That points to compound neighbourhoods such as Kempe chains
    as the next step.
 
-These conclusions come from synthetic instances. The scope and the planned validation on
-ITC-2007 data are described in [threats to validity](docs/research/timetabling.md#5-threats-to-validity).
+### External validation on ITC-2007
+
+The same solvers were run on the 24 public instances of the ITC-2007 post-enrolment track:
+10 paired seeds, 10⁶ iterations, 1,680 runs. These instances add room features, per-event
+slot availability and precedence constraints, and they are much harder to make feasible. The
+competition scores a timetable by **distance to feasibility** (DtF, the number of students in
+events left unplaced), then by soft cost. Every reported (DtF, soft) pair was reproduced exactly
+by the competition's official validator. Full tables are in
+[`docs/research/results/itc2007/summary.md`](docs/research/results/itc2007/summary.md).
+
+| Solver | Feasible runs | Instances feasible | Mean DtF | Mean hard violations, lower on |
+|---|---:|---:|---:|---|
+| Greedy, input order | 0/240 | 0/24 | 1772 | |
+| Greedy, largest degree first | 0/240 | 0/24 | 1410 | 24/24 instances vs input order |
+| Greedy, DSATUR | 4/240 | 1/24 | 1249 | 24/24 instances vs largest degree |
+| Descent ablation (from DSATUR) | 10/240 | 1/24 | 966 | 24/24 instances vs DSATUR |
+| Simulated annealing (from DSATUR) | **21/240** | **3/24** | **826** | 23/24 instances vs descent (1 tie) |
+
+- **Replicates:** degree-based ordering beats input order (F1), and local search improves on
+  its start on every instance.
+- **Does not replicate:** on these tight instances DSATUR *beats* largest-degree ordering
+  (lower mean DtF on 22/24 instances, p < 10⁻⁴), and SA *beats* the descent control (22/24,
+  p < 10⁻⁵). Findings 2 and 4 above therefore hold only for easy-to-satisfy instances, where
+  the search is about soft cost alone.
+- **Against the competition:** the five finalists placed every event on all 24 instances,
+  often with soft cost below 50. This engine places every event on only 3. These are
+  general-purpose baselines without a feasibility phase, run under an iteration budget
+  instead of the competition's time limit. The comparison shows how large the gap is; it is
+  not a controlled ranking ([details](docs/research/timetabling.md#43-external-validation-itc-2007-post-enrolment-instances)).
+
+The scope of all of these conclusions is discussed under [threats to validity](docs/research/timetabling.md#5-threats-to-validity).
 
 ## Quick start
 
@@ -163,6 +192,7 @@ links events that share a student or an instructor. Solvers minimise
 | Instructor clashes | Student-days with exactly one class |
 | Room double-bookings | |
 | Room capacity violations | |
+| *Optional:* room features, slot availability, precedence | |
 
 **Exact incremental evaluation.** `TimetableState` keeps occupancy counts per (student, slot),
 (instructor, slot) and (room, slot). Every cost term is a function of these counts, so a move
@@ -199,7 +229,16 @@ reproduced exactly. Budgets are counted in iterations, not seconds.
 ./mvnw -q compile
 ./mvnw -q exec:java -Dexec.args="--seeds 10 --iterations 1000000 --out results"
 # options: --sizes small,medium,large   --seeds N   --iterations N   --out DIR
+
+# ITC-2007 track 2: download the 24 instances (checksum-verified, gitignored) and benchmark them
+scripts/fetch-itc2007.sh
+./mvnw -q exec:java -Dexec.args="--itc data/itc2007 --seeds 10 --iterations 1000000 --threads 6 --out results/itc2007"
+# options: --instances 1-24|1,5,9   --threads N (timings only)   --solutions DIR (.sln files)
 ```
+
+The ITC-2007 instance files are not redistributed here because the competition published no
+licence for them. The script fetches them from the organisers' site, with the Internet
+Archive as a fallback.
 
 This produces `results/runs.csv` (one row per solver run, with every cost component and the
 timing) and `results/summary.md` (CIs, decomposition and paired tests). The committed
@@ -247,7 +286,8 @@ SmartCampus/
 
 | Layer | Approach |
 |---|---|
-| Cost model | Hand-computed fixtures for every constraint type, plus a property test (incremental ≡ reference) |
+| Cost model | Hand-computed fixtures for every constraint type, plus a property test (incremental ≡ reference), also with room features, availability and precedence active |
+| ITC-2007 I/O | Hand-written `.tim` fixture; benchmark scores cross-checked against the competition's official validator |
 | Solvers | Determinism per seed, feasibility on easy instances, beats the random baseline, local search never worse than its start |
 | Statistics | Analytic checks: bootstrap reproducibility, sign-test binomial tails |
 | REST API | `@SpringBootTest` + MockMvc covering the HTTP contract, validation errors and health |
@@ -257,7 +297,7 @@ Current suite: **4,107 tests, 0 failures**. Line coverage by package (JaCoCo):
 
 | ≥ 90% | 80–90% | < 80% |
 |---|---|---|
-| interfaces 100%, exceptions 99.8%, events 99%, services 98%, scheduling.solver 97%, reflection 96%, scheduling.model 96%, api 96%, utils 96%, app 95%, repositories 95%, patterns 95%, cache 94%, io 93%, scheduling.eval 93%, concurrent 92% | functional 87%, enums 86%, models 86%, security 81% | scheduling.experiment 52% (benchmark runner, exercised by the CI smoke run) |
+| interfaces 100%, exceptions 99.8%, events 99%, services 98%, scheduling.io 100%, scheduling.model 98%, scheduling.eval 98%, scheduling.solver 98%, reflection 96%, api 96%, utils 96%, app 95%, repositories 95%, patterns 95%, cache 94%, io 93%, concurrent 92% | functional 87%, enums 86%, models 86%, security 81% | scheduling.experiment 52% (benchmark runner, exercised by the CI smoke run) |
 
 Overall line coverage is 93%. Writing the tests uncovered and fixed more than 170 defects,
 including an always-failing token manager, a forged-token revocation path, a deadlock in the
@@ -267,7 +307,7 @@ broken database transactions and a zip-slip path in backup restore. Each fix is 
 its commit message and pinned by a regression test.
 
 `./mvnw verify` runs everything and enforces an **85% line-coverage floor** on the engine's
-model, evaluation and solver packages through JaCoCo. The report is written to
+model, evaluation, solver and I/O packages through JaCoCo. The report is written to
 `target/site/jacoco/index.html`.
 
 Every push and pull request runs [CI](.github/workflows/ci.yml): the full `verify` build with the
@@ -279,9 +319,10 @@ publishes the jar through the [release workflow](.github/workflows/release.yml).
 
 - [ ] Temperature-calibration sweep to test *why* descent beats SA ([research §6](docs/research/timetabling.md#6-open-hypotheses-and-next-experiments))
 - [ ] Kempe-chain neighbourhood aimed at single-class days
-- [ ] ITC-2007 post-enrolment instance loader for external validation
+- [x] ITC-2007 post-enrolment instance loader and external validation ([results](docs/research/timetabling.md#43-external-validation-itc-2007-post-enrolment-instances))
 - [ ] Adapter from `models.Course` enrollments to `scheduling.TimetablingProblem`
-- [ ] Room features and per-event time-window constraints
+- [x] Room features, per-event slot availability and precedence constraints ([ADR 0004](docs/adr/0004-optional-itc2007-side-constraints.md))
+- [ ] Feasibility phase that minimises ITC distance to feasibility directly
 
 ## Contributing
 

@@ -12,12 +12,20 @@ documented project, and adds a course-timetabling research engine.
 ### Added
 - `scheduling` package: post-enrolment course timetabling engine
   - immutable problem model with conflict graph and best-fit room lists
-  - reference cost model (5 hard, 3 soft constraint families) and an incremental
+  - reference cost model (5 hard, 3 soft constraint families, plus the 3 optional hard ones below) and an incremental
     `TimetableState` verified against it by property tests
   - random baseline, greedy construction (input, random, largest-degree, DSATUR orderings)
     and simulated annealing with calibrated temperature and best-so-far tracking
   - seeded Zipf-popularity instance generator, bootstrap CIs, sign test and a paired
     benchmark runner (`ExperimentRunner`)
+  - optional room features, per-event slot availability and event precedence as hard
+    constraints, with the incremental evaluator still exactly equal to the reference model
+    and synthetic results unchanged bit for bit ([ADR 0004](docs/adr/0004-optional-itc2007-side-constraints.md))
+  - ITC-2007 post-enrolment (track 2) support: `Itc2007Loader` for `.tim` files and `.sln`
+    output, `ItcScore` for the competition's distance-to-feasibility and soft measure
+    (cross-checked against the official `checksln3b` validator), an `--itc` benchmark mode
+    and `scripts/fetch-itc2007.sh`, which downloads the 24 instances with SHA-256 checks
+  - ITC-2007 benchmark results (24 instances, 10 seeds) in `docs/research/results/itc2007/`
 - REST API (`/api/v1/timetabling/*`) with validation, RFC 7807 errors, OpenAPI docs and
   Actuator health probes
 - Benchmark results and methodology in `docs/research/`, architecture decision records in
