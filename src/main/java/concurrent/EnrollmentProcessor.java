@@ -25,6 +25,7 @@ public class EnrollmentProcessor {
     private final AtomicInteger activeProcesses;
     private final BlockingQueue<EnrollmentRequest> enrollmentQueue;
     private volatile boolean isProcessing;
+    private volatile long retryBackoffMillis = 1000;
     
     public EnrollmentProcessor(EnrollmentService enrollmentService, 
                              NotificationService notificationService) {
@@ -203,7 +204,7 @@ public class EnrollmentProcessor {
                 attempts++;
                 if (attempts <= maxRetries) {
                     try {
-                        Thread.sleep(1000 * attempts); // Exponential backoff
+                        Thread.sleep(retryBackoffMillis * attempts); // Linear backoff
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
@@ -213,6 +214,14 @@ public class EnrollmentProcessor {
             
             return result;
         }, executorService);
+    }
+    
+    /**
+     * Set the base delay between retries of {@link #processEnrollmentWithRetry}
+     * (attempt n waits n * base). Defaults to one second.
+     */
+    void setRetryBackoffMillis(long retryBackoffMillis) {
+        this.retryBackoffMillis = retryBackoffMillis;
     }
     
     /**
@@ -274,7 +283,11 @@ public class EnrollmentProcessor {
     // Helper methods
     
     private boolean hasAvailableCapacity(Course course) {
-        return course.getEnrolledStudentIds().size() < course.getMaxEnrollment();
+        // Enrollments made through this processor are recorded by the enrollment
+        // service, not on the Course object, so both must be counted
+        int enrolled = Math.max(course.getEnrolledStudentIds().size(),
+                                enrollmentService.getCurrentEnrollmentCount(course.getCourseId()));
+        return enrolled < course.getMaxEnrollment();
     }
     
     private boolean isStudentEnrolled(Student student, Course course) {
