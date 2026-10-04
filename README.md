@@ -4,10 +4,12 @@
 
 **A course-timetabling research engine and university-management domain library, served through a Spring Boot REST API.**
 
+[![CI](https://github.com/SatvikPraveen/SmartCampus/actions/workflows/ci.yml/badge.svg)](https://github.com/SatvikPraveen/SmartCampus/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/SatvikPraveen/SmartCampus/actions/workflows/codeql.yml/badge.svg)](https://github.com/SatvikPraveen/SmartCampus/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21_LTS-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3.2](https://img.shields.io/badge/Spring_Boot-3.2-6DB33F.svg)](https://spring.io/projects/spring-boot)
-[![Tests](https://img.shields.io/badge/tests-JUnit_5-25A162.svg)](#testing-and-quality)
+[![Tests](https://img.shields.io/badge/tests-1%2C980_passing-25A162.svg)](#testing-and-quality)
 [![Reproducible](https://img.shields.io/badge/benchmarks-seeded_%26_paired-8A2BE2.svg)](docs/research/timetabling.md)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-lightgrey.svg)](CITATION.cff)
 
@@ -265,8 +267,12 @@ commit message and pinned by a regression test.
 
 `./mvnw verify` runs everything and enforces an **85% line-coverage floor** on the engine's
 model, evaluation and solver packages through JaCoCo. The report is written to
-`target/site/jacoco/index.html`. CI, CodeQL and release workflows are ready in
-[`.github/workflow-drafts/`](.github/workflow-drafts/README.md).
+`target/site/jacoco/index.html`.
+
+Every push and pull request runs [CI](.github/workflows/ci.yml): the full `verify` build with the
+coverage gate, a benchmark smoke run, and a Docker image build with a container health check.
+[CodeQL](.github/workflows/codeql.yml) scans the code weekly and on every PR, and tagging `v*`
+publishes the jar through the [release workflow](.github/workflows/release.yml).
 
 ## Roadmap
 
