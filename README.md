@@ -251,6 +251,18 @@ SmartCampus/
 | REST API | `@SpringBootTest` + MockMvc covering the HTTP contract, validation errors and health |
 | Domain library | Unit tests for services, models, utilities, security and repositories, written as regression tests for the bugs they exposed |
 
+Current suite: **1,980 tests, 0 failures**. Line coverage by package (JaCoCo):
+
+| ≥ 90% | 70–90% | < 50% (not yet tested) |
+|---|---|---|
+| scheduling.model 96%, scheduling.solver 97%, scheduling.eval 93%, api 96%, utils 96%, repositories 95%, cache 94% | functional 87%, enums 86%, security 81%, models 73% | services 40%, io, patterns, concurrent, reflection, events, app: 0% |
+
+Overall line coverage is 41%. The untested packages are the clearest next step for
+contributors. Writing the existing tests uncovered and fixed more than 70 defects, including
+an always-failing token manager, a forged-token revocation path, a deadlock in the LRU cache
+views and grade conversions that returned the wrong scale. Each fix is documented in its
+commit message and pinned by a regression test.
+
 `./mvnw verify` runs everything and enforces an **85% line-coverage floor** on the engine's
 model, evaluation and solver packages through JaCoCo. The report is written to
 `target/site/jacoco/index.html`. CI, CodeQL and release workflows are ready in

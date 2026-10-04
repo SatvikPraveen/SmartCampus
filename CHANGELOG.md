@@ -24,7 +24,8 @@ documented project, and adds a course-timetabling research engine.
   `docs/adr/`, `CITATION.cff`, `SECURITY.md`
 - Maven wrapper, layered non-root Docker image, CI/CodeQL/release workflow drafts,
   Dependabot, issue and PR templates
-- Test suite for the scheduling engine, the API and the domain packages, with a JaCoCo
+- Test suite of 1,980 tests covering the scheduling engine, the API and the domain packages
+  (models, enums, services, utils, cache, security, repositories, functional), with a JaCoCo
   coverage gate on the engine
 
 ### Fixed
@@ -34,6 +35,12 @@ documented project, and adds a course-timetabling research engine.
 - `getCurrentSemester()` in three classes always returned `"Fall"` (`||` instead of `&&`)
 - Application class could not start (JPA repositories enabled for a nonexistent package,
   undefined auditor bean)
+- More than 70 behavioural defects found by the new test suites, each pinned by a regression
+  test. Highlights: `TokenManager` could not be constructed and no token ever validated, and a
+  forged token could revoke a genuine one; `SecurityManager` double-counted failed logins;
+  `LRUCache` key/value/entry views deadlocked; `GradeLevel.fromPercentage` mapped 85% to an
+  honours grade; `SecurityUtil.sanitizeForSQL` skipped four of its six escapes; several
+  services lost a student's seat on a failed transfer or allowed duplicate enrolment
 
 ### Removed
 - Dependencies with no code using them: Spring Data JPA, Security, Redis, Mail, Flyway,
