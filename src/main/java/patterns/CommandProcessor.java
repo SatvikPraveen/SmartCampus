@@ -104,7 +104,7 @@ public class CommandProcessor {
     /**
      * Undo the last executed command
      */
-    public CommandResult undo() {
+    public synchronized CommandResult undo() {
         if (undoStack.isEmpty()) {
             return new CommandResult(false, "No commands to undo", null);
         }
@@ -127,7 +127,7 @@ public class CommandProcessor {
     /**
      * Redo the last undone command
      */
-    public CommandResult redo() {
+    public synchronized CommandResult redo() {
         if (redoStack.isEmpty()) {
             return new CommandResult(false, "No commands to redo", null);
         }
@@ -146,7 +146,7 @@ public class CommandProcessor {
     /**
      * Record command in history and undo stack
      */
-    private void recordCommand(Command command) {
+    private synchronized void recordCommand(Command command) {
         commandHistory.offer(command);
         
         // Maintain history size
@@ -223,14 +223,14 @@ public class CommandProcessor {
     /**
      * Get command history
      */
-    public List<Command> getCommandHistory() {
+    public synchronized List<Command> getCommandHistory() {
         return new ArrayList<>(commandHistory);
     }
     
     /**
      * Get command statistics
      */
-    public CommandStatistics getStatistics() {
+    public synchronized CommandStatistics getStatistics() {
         Map<String, Integer> commandCounts = new HashMap<>();
         int successfulCommands = 0;
         int failedCommands = 0;
@@ -261,7 +261,7 @@ public class CommandProcessor {
     /**
      * Clear all history and stacks
      */
-    public void clearHistory() {
+    public synchronized void clearHistory() {
         commandHistory.clear();
         undoStack.clear();
         redoStack.clear();
@@ -358,6 +358,9 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
+            if (!successful) {
+                return null; // nothing was created, so there is nothing to remove
+            }
             studentService.removeStudent(student.getStudentId());
             return null;
         }
@@ -467,6 +470,9 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
+            if (!successful) {
+                return null; // nothing was created, so there is nothing to remove
+            }
             courseService.removeCourse(course.getCourseId());
             return null;
         }
@@ -578,6 +584,9 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
+            if (!successful) {
+                return null; // the enrollment never happened, so there is nothing to drop
+            }
             enrollmentService.dropStudent(student.getStudentId(), course.getCourseId(), "Command undo");
             return null;
         }
@@ -614,6 +623,9 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
+            if (!successful) {
+                return null; // the student was never dropped, so there is nothing to restore
+            }
             enrollmentService.enrollStudent(student.getStudentId(), course.getCourseId(),
                                             course.getSemester(), course.getYear());
             return null;
