@@ -2,8 +2,10 @@
 
 package patterns;
 
+import interfaces.Reportable.ReportType;
 import models.*;
 import services.*;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.function.Function;
 
@@ -14,9 +16,23 @@ import java.util.function.Function;
 public class AdapterService {
     
     /**
+     * Apply a single "First Last" display name to a user's first and last name fields
+     */
+    private static void applyFullName(User user, String fullName) {
+        if (fullName == null || fullName.trim().isEmpty()) {
+            return;
+        }
+        String[] parts = fullName.trim().split("\\s+", 2);
+        user.setFirstName(parts[0]);
+        if (parts.length > 1) {
+            user.setLastName(parts[1]);
+        }
+    }
+    
+    /**
      * Adapter for integrating with legacy student information systems
      */
-    public static class LegacyStudentAdapter implements StudentService {
+    public static class LegacyStudentAdapter {
         
         private final LegacyStudentSystem legacySystem;
         private final StudentService modernService;
@@ -26,7 +42,6 @@ public class AdapterService {
             this.modernService = modernService;
         }
         
-        @Override
         public Student createStudent(Student student) {
             // Convert modern Student to legacy format
             LegacyStudentRecord legacyRecord = convertToLegacyFormat(student);
@@ -38,25 +53,21 @@ public class AdapterService {
             return convertFromLegacyFormat(created);
         }
         
-        @Override
         public Student updateStudent(Student student) {
             LegacyStudentRecord legacyRecord = convertToLegacyFormat(student);
             LegacyStudentRecord updated = legacySystem.updateStudent(legacyRecord);
             return convertFromLegacyFormat(updated);
         }
         
-        @Override
         public void deleteStudent(String studentId) {
             legacySystem.removeStudent(studentId);
         }
         
-        @Override
         public Student getStudentById(String id) {
             LegacyStudentRecord record = legacySystem.findStudent(id);
             return record != null ? convertFromLegacyFormat(record) : null;
         }
         
-        @Override
         public List<Student> getAllStudents() {
             List<LegacyStudentRecord> legacyRecords = legacySystem.getAllStudents();
             return legacyRecords.stream()
@@ -64,10 +75,8 @@ public class AdapterService {
                 .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
         }
         
-        @Override
         public List<Student> getStudentsByDepartment(Department department) {
-            // Legacy system uses department codes
-            List<LegacyStudentRecord> records = legacySystem.getStudentsByDept(department.getDepartmentCode());
+            List<LegacyStudentRecord> records = legacySystem.getStudentsByDept(department.getDepartmentId());
             return records.stream()
                 .map(this::convertFromLegacyFormat)
                 .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
@@ -75,33 +84,34 @@ public class AdapterService {
         
         private LegacyStudentRecord convertToLegacyFormat(Student student) {
             LegacyStudentRecord record = new LegacyStudentRecord();
-            record.setStudentId(student.getId());
-            record.setFullName(student.getName());
+            record.setStudentId(student.getStudentId());
+            record.setFullName(student.getFullName());
             record.setEmailAddress(student.getEmail());
-            record.setDeptCode(student.getDepartment() != null ? student.getDepartment().getDepartmentCode() : "");
+            record.setDeptCode(student.getDepartmentId() != null ? student.getDepartmentId() : "");
             record.setEnrollDate(student.getEnrollmentDate());
             return record;
         }
         
         private Student convertFromLegacyFormat(LegacyStudentRecord record) {
-            // Create a minimal Department object for the conversion
-            Department dept = record.getDeptCode() != null && !record.getDeptCode().isEmpty() ?
-                new Department(record.getDeptCode(), "", "", "", 0, 0) : null;
-            
-            return new Student(
-                record.getStudentId(),
-                record.getFullName(),
-                record.getEmailAddress(),
-                dept,
-                record.getEnrollDate()
-            );
+            Student student = new Student();
+            student.setUserId(record.getStudentId());
+            student.setStudentId(record.getStudentId());
+            applyFullName(student, record.getFullName());
+            student.setEmail(record.getEmailAddress());
+            if (record.getDeptCode() != null && !record.getDeptCode().isEmpty()) {
+                student.setDepartmentId(record.getDeptCode());
+            }
+            if (record.getEnrollDate() != null) {
+                student.setEnrollmentDate(record.getEnrollDate());
+            }
+            return student;
         }
     }
     
     /**
      * Adapter for external grade reporting systems
      */
-    public static class ExternalGradeReportAdapter implements ReportService {
+    public static class ExternalGradeReportAdapter {
         
         private final ExternalReportingAPI externalAPI;
         private final ReportService internalReportService;
@@ -111,15 +121,16 @@ public class AdapterService {
             this.internalReportService = internalReportService;
         }
         
-        @Override
         public String generateStudentTranscript(Student student) {
-            // Get internal transcript
-            String internalTranscript = internalReportService.generateStudentTranscript(student);
+            // Get internal grade report data
+            String internalTranscript = internalReportService
+                .generateReport(ReportType.GRADE_REPORT, Map.of("studentId", student.getStudentId()))
+                .getContent();
             
             // Convert to external format
             ExternalTranscriptRequest request = new ExternalTranscriptRequest();
-            request.setStudentId(student.getId());
-            request.setStudentName(student.getName());
+            request.setStudentId(student.getStudentId());
+            request.setStudentName(student.getFullName());
             request.setInternalData(internalTranscript);
             
             // Submit to external system
@@ -128,13 +139,14 @@ public class AdapterService {
             return response.getFormattedTranscript();
         }
         
-        @Override
         public String generateCourseReport(Course course) {
-            String internalReport = internalReportService.generateCourseReport(course);
+            String internalReport = internalReportService
+                .generateReport(ReportType.ENROLLMENT_REPORT, Map.of("courseId", course.getCourseId()))
+                .getContent();
             
             ExternalCourseReportRequest request = new ExternalCourseReportRequest();
             request.setCourseCode(course.getCourseCode());
-            request.setCourseName(course.getName());
+            request.setCourseName(course.getCourseName());
             request.setInternalData(internalReport);
             
             ExternalCourseReportResponse response = externalAPI.generateCourseReport(request);
@@ -142,15 +154,8 @@ public class AdapterService {
             return response.getFormattedReport();
         }
         
-        @Override
-        public String generateDepartmentReport(Department department) {
-            // Delegate to internal service since external API doesn't support department reports
-            return internalReportService.generateDepartmentReport(department);
-        }
-        
-        @Override
         public Map<String, Object> getUniversityStatistics() {
-            return internalReportService.getUniversityStatistics();
+            return internalReportService.getSummaryStatistics();
         }
     }
     
@@ -228,37 +233,41 @@ public class AdapterService {
                 // Simplified XML parsing - in real implementation, use proper XML parser
                 Map<String, String> data = parseSimpleXml(xmlData);
                 
-                return new Course(
+                Course course = new Course(
+                    data.get("courseId"),
                     data.get("courseCode"),
                     data.get("name"),
                     data.get("description"),
                     Integer.parseInt(data.getOrDefault("credits", "3")),
-                    createDepartmentFromCode(data.get("departmentCode")),
-                    createProfessorFromId(data.get("professorId")),
-                    data.get("semester"),
-                    data.get("academicYear"),
-                    Integer.parseInt(data.getOrDefault("capacity", "30")),
-                    Integer.parseInt(data.getOrDefault("enrolled", "0"))
+                    emptyToNull(data.get("departmentId"))
                 );
+                course.setProfessorId(emptyToNull(data.get("professorId")));
+                course.setSemester(data.get("semester"));
+                if (data.containsKey("year")) {
+                    course.setYear(Integer.parseInt(data.get("year")));
+                }
+                course.setMaxEnrollment(Integer.parseInt(data.getOrDefault("capacity", "30")));
+                return course;
             }
             
             public String convertCourseToXml(Course course) {
                 StringBuilder xml = new StringBuilder();
                 xml.append("<course>");
+                xml.append("<courseId>").append(course.getCourseId()).append("</courseId>");
                 xml.append("<courseCode>").append(course.getCourseCode()).append("</courseCode>");
-                xml.append("<name>").append(escapeXml(course.getName())).append("</name>");
+                xml.append("<name>").append(escapeXml(course.getCourseName())).append("</name>");
                 xml.append("<description>").append(escapeXml(course.getDescription())).append("</description>");
                 xml.append("<credits>").append(course.getCredits()).append("</credits>");
-                xml.append("<departmentCode>").append(
-                    course.getDepartment() != null ? course.getDepartment().getDepartmentCode() : ""
-                ).append("</departmentCode>");
+                xml.append("<departmentId>").append(
+                    course.getDepartmentId() != null ? course.getDepartmentId() : ""
+                ).append("</departmentId>");
                 xml.append("<professorId>").append(
-                    course.getProfessor() != null ? course.getProfessor().getId() : ""
+                    course.getProfessorId() != null ? course.getProfessorId() : ""
                 ).append("</professorId>");
                 xml.append("<semester>").append(course.getSemester()).append("</semester>");
-                xml.append("<academicYear>").append(course.getAcademicYear()).append("</academicYear>");
-                xml.append("<capacity>").append(course.getCapacity()).append("</capacity>");
-                xml.append("<enrolled>").append(course.getEnrolledStudents()).append("</enrolled>");
+                xml.append("<year>").append(course.getYear()).append("</year>");
+                xml.append("<capacity>").append(course.getMaxEnrollment()).append("</capacity>");
+                xml.append("<enrolled>").append(course.getEnrolledStudentIds().size()).append("</enrolled>");
                 xml.append("</course>");
                 return xml.toString();
             }
@@ -291,14 +300,8 @@ public class AdapterService {
                           .replace("'", "&apos;");
             }
             
-            private Department createDepartmentFromCode(String code) {
-                return code != null && !code.isEmpty() ? 
-                    new Department(code, "", "", "", 0, 0) : null;
-            }
-            
-            private Professor createProfessorFromId(String id) {
-                return id != null && !id.isEmpty() ? 
-                    new Professor(id, "", "", null, "", "", 0) : null;
+            private String emptyToNull(String value) {
+                return value != null && !value.isEmpty() ? value : null;
             }
         }
     }
@@ -306,11 +309,12 @@ public class AdapterService {
     /**
      * Adapter for third-party authentication systems
      */
-    public static class ExternalAuthAdapter implements AuthService {
+    public static class ExternalAuthAdapter {
         
         private final ExternalAuthProvider externalProvider;
         private final AuthService internalAuthService;
         private final Map<String, User> externalUserCache;
+        private AuthService.AuthenticationResult internalAuthResult;
         
         public ExternalAuthAdapter(ExternalAuthProvider externalProvider, AuthService internalAuthService) {
             this.externalProvider = externalProvider;
@@ -318,7 +322,6 @@ public class AdapterService {
             this.externalUserCache = new HashMap<>();
         }
         
-        @Override
         public boolean authenticate(String username, String password) {
             // Try external authentication first
             ExternalAuthResult result = externalProvider.authenticate(username, password);
@@ -331,72 +334,87 @@ public class AdapterService {
             }
             
             // Fall back to internal authentication
-            return internalAuthService.authenticate(username, password);
+            AuthService.AuthenticationResult internalResult = internalAuthService.authenticate(username, password);
+            if (internalResult.isSuccess()) {
+                internalAuthResult = internalResult;
+                return true;
+            }
+            return false;
         }
         
-        @Override
         public User getCurrentUser() {
             String currentUsername = externalProvider.getCurrentUsername();
             if (currentUsername != null && externalUserCache.containsKey(currentUsername)) {
                 return externalUserCache.get(currentUsername);
             }
-            return internalAuthService.getCurrentUser();
+            return internalAuthResult != null ? internalAuthResult.getUser() : null;
         }
         
-        @Override
-        public boolean hasPermission(User user, String permission) {
+        public boolean hasPermission(User user, String resource, AuthService.PermissionLevel permission) {
             // Check external permissions first
             if (externalUserCache.containsValue(user)) {
                 ExternalPermissionResult result = externalProvider.checkPermission(
-                    user.getEmail(), permission);
+                    user.getEmail(), resource + ":" + permission.name());
                 if (result.hasPermission()) {
                     return true;
                 }
             }
             
             // Fall back to internal permission check
-            return internalAuthService.hasPermission(user, permission);
+            return internalAuthService.hasPermission(user.getUserId(), resource, permission);
         }
         
-        @Override
         public void logout() {
             externalProvider.logout();
-            internalAuthService.logout();
+            if (internalAuthResult != null && internalAuthResult.getSession() != null) {
+                internalAuthService.logout(internalAuthResult.getSession().getSessionToken());
+            }
+            internalAuthResult = null;
             externalUserCache.clear();
         }
         
-        @Override
         public boolean changePassword(String oldPassword, String newPassword) {
             // External systems typically don't allow password changes through this interface
-            return internalAuthService.changePassword(oldPassword, newPassword);
+            User currentUser = getCurrentUser();
+            return currentUser != null &&
+                   internalAuthService.changePassword(currentUser.getUserId(), oldPassword, newPassword);
         }
         
         private User convertExternalUser(ExternalUserInfo userInfo) {
             // Convert external user format to internal User format
             if (userInfo.getUserType().equals("STUDENT")) {
-                return new Student(
-                    userInfo.getId(),
-                    userInfo.getDisplayName(),
-                    userInfo.getEmail(),
-                    null, // Department would need to be looked up separately
-                    new Date()
-                );
+                Student student = new Student();
+                student.setStudentId(userInfo.getId());
+                populateUser(student, userInfo);
+                return student;
             } else if (userInfo.getUserType().equals("FACULTY")) {
-                return new Professor(
-                    userInfo.getId(),
-                    userInfo.getDisplayName(),
-                    userInfo.getEmail(),
-                    null, // Department would need to be looked up separately
-                    "",   // Specialization not available from external system
-                    "",   // Office location not available
-                    0     // Years of experience not available
-                );
+                // Department, rank and specialization are not available from the external system
+                Professor professor = new Professor();
+                professor.setProfessorId(userInfo.getId());
+                populateUser(professor, userInfo);
+                return professor;
             } else {
                 // Default to creating a basic User object
-                return new User(userInfo.getId(), userInfo.getDisplayName(), userInfo.getEmail()) {
-                    // Anonymous subclass for basic user
+                User user = new User() {
+                    @Override
+                    public String getRole() {
+                        return userInfo.getUserType();
+                    }
+                    
+                    @Override
+                    public void displayInfo() {
+                        System.out.println("User: " + getFullName() + " (" + getEmail() + ")");
+                    }
                 };
+                populateUser(user, userInfo);
+                return user;
             }
+        }
+        
+        private void populateUser(User user, ExternalUserInfo userInfo) {
+            user.setUserId(userInfo.getId());
+            applyFullName(user, userInfo.getDisplayName());
+            user.setEmail(userInfo.getEmail());
         }
     }
     
@@ -513,7 +531,7 @@ public class AdapterService {
         private String fullName;
         private String emailAddress;
         private String deptCode;
-        private Date enrollDate;
+        private LocalDate enrollDate;
         
         // Getters and setters
         public String getStudentId() { return studentId; }
@@ -528,8 +546,8 @@ public class AdapterService {
         public String getDeptCode() { return deptCode; }
         public void setDeptCode(String deptCode) { this.deptCode = deptCode; }
         
-        public Date getEnrollDate() { return enrollDate; }
-        public void setEnrollDate(Date enrollDate) { this.enrollDate = enrollDate; }
+        public LocalDate getEnrollDate() { return enrollDate; }
+        public void setEnrollDate(LocalDate enrollDate) { this.enrollDate = enrollDate; }
     }
     
     // External API mock classes

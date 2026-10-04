@@ -7,6 +7,7 @@ import events.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
+import java.time.LocalDateTime;
 
 /**
  * Observer pattern implementation for managing system events
@@ -321,6 +322,15 @@ public class EventManager {
     
     // Helper classes and interfaces
     
+    /**
+     * Listener for events of a specific type
+     */
+    public interface EventListener<T extends Event> {
+        void handleEvent(T event);
+        
+        Class<T> getEventType();
+    }
+    
     public enum EventPriority {
         HIGHEST, HIGH, NORMAL, LOW, LOWEST
     }
@@ -439,7 +449,19 @@ public class EventManager {
         private final Date enrollmentDate;
         
         public StudentEnrolledEvent(Student student, Course course, Date enrollmentDate) {
-            super("StudentEnrolled", enrollmentDate);
+            super("StudentEnrolled");
+            this.student = student;
+            this.course = course;
+            this.enrollmentDate = enrollmentDate;
+        }
+        
+        private StudentEnrolledEvent(String eventId, String eventType, LocalDateTime timestamp,
+                                     String sourceSystem, String correlationId, int version,
+                                     Priority priority, String aggregateId, String aggregateType,
+                                     Long aggregateVersion, Map<String, Object> metadata,
+                                     Student student, Course course, Date enrollmentDate) {
+            super(eventId, eventType, timestamp, sourceSystem, correlationId, version,
+                  priority, aggregateId, aggregateType, aggregateVersion, metadata);
             this.student = student;
             this.course = course;
             this.enrollmentDate = enrollmentDate;
@@ -448,6 +470,39 @@ public class EventManager {
         public Student getStudent() { return student; }
         public Course getCourse() { return course; }
         public Date getEnrollmentDate() { return enrollmentDate; }
+        
+        @Override
+        public Category getCategory() { return Category.DOMAIN; }
+        
+        @Override
+        public Object getPayload() {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("studentId", student != null ? student.getStudentId() : null);
+            payload.put("courseId", course != null ? course.getCourseId() : null);
+            payload.put("enrollmentDate", enrollmentDate);
+            return payload;
+        }
+        
+        @Override
+        public boolean isValid() {
+            return student != null && course != null;
+        }
+        
+        @Override
+        public String getDescription() {
+            return "Student " + (student != null ? student.getFullName() : "unknown") +
+                   " enrolled in " + (course != null ? course.getCourseName() : "unknown");
+        }
+        
+        @Override
+        protected Event createCopy(String eventId, String eventType, LocalDateTime timestamp,
+                                   String sourceSystem, String correlationId, int version,
+                                   Priority priority, String aggregateId, String aggregateType,
+                                   Long aggregateVersion, Map<String, Object> metadata) {
+            return new StudentEnrolledEvent(eventId, eventType, timestamp, sourceSystem, correlationId,
+                                            version, priority, aggregateId, aggregateType,
+                                            aggregateVersion, metadata, student, course, enrollmentDate);
+        }
     }
     
     public static class GradeUpdatedEvent extends Event {
@@ -457,7 +512,20 @@ public class EventManager {
         private final Grade oldGrade;
         
         public GradeUpdatedEvent(Student student, Course course, Grade newGrade, Grade oldGrade) {
-            super("GradeUpdated", new Date());
+            super("GradeUpdated");
+            this.student = student;
+            this.course = course;
+            this.newGrade = newGrade;
+            this.oldGrade = oldGrade;
+        }
+        
+        private GradeUpdatedEvent(String eventId, String eventType, LocalDateTime timestamp,
+                                  String sourceSystem, String correlationId, int version,
+                                  Priority priority, String aggregateId, String aggregateType,
+                                  Long aggregateVersion, Map<String, Object> metadata,
+                                  Student student, Course course, Grade newGrade, Grade oldGrade) {
+            super(eventId, eventType, timestamp, sourceSystem, correlationId, version,
+                  priority, aggregateId, aggregateType, aggregateVersion, metadata);
             this.student = student;
             this.course = course;
             this.newGrade = newGrade;
@@ -468,6 +536,41 @@ public class EventManager {
         public Course getCourse() { return course; }
         public Grade getNewGrade() { return newGrade; }
         public Grade getOldGrade() { return oldGrade; }
+        
+        @Override
+        public Category getCategory() { return Category.DOMAIN; }
+        
+        @Override
+        public Object getPayload() {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("studentId", student != null ? student.getStudentId() : null);
+            payload.put("courseId", course != null ? course.getCourseId() : null);
+            payload.put("newGrade", newGrade != null ? newGrade.getLetterGrade() : null);
+            payload.put("oldGrade", oldGrade != null ? oldGrade.getLetterGrade() : null);
+            return payload;
+        }
+        
+        @Override
+        public boolean isValid() {
+            return student != null && course != null && newGrade != null;
+        }
+        
+        @Override
+        public String getDescription() {
+            return "Grade updated for " + (student != null ? student.getFullName() : "unknown") +
+                   " in " + (course != null ? course.getCourseName() : "unknown") +
+                   ": " + (newGrade != null ? newGrade.getLetterGrade() : "N/A");
+        }
+        
+        @Override
+        protected Event createCopy(String eventId, String eventType, LocalDateTime timestamp,
+                                   String sourceSystem, String correlationId, int version,
+                                   Priority priority, String aggregateId, String aggregateType,
+                                   Long aggregateVersion, Map<String, Object> metadata) {
+            return new GradeUpdatedEvent(eventId, eventType, timestamp, sourceSystem, correlationId,
+                                         version, priority, aggregateId, aggregateType,
+                                         aggregateVersion, metadata, student, course, newGrade, oldGrade);
+        }
     }
     
     public static class CourseCreatedEvent extends Event {
@@ -475,13 +578,56 @@ public class EventManager {
         private final Professor professor;
         
         public CourseCreatedEvent(Course course, Professor professor) {
-            super("CourseCreated", new Date());
+            super("CourseCreated");
+            this.course = course;
+            this.professor = professor;
+        }
+        
+        private CourseCreatedEvent(String eventId, String eventType, LocalDateTime timestamp,
+                                   String sourceSystem, String correlationId, int version,
+                                   Priority priority, String aggregateId, String aggregateType,
+                                   Long aggregateVersion, Map<String, Object> metadata,
+                                   Course course, Professor professor) {
+            super(eventId, eventType, timestamp, sourceSystem, correlationId, version,
+                  priority, aggregateId, aggregateType, aggregateVersion, metadata);
             this.course = course;
             this.professor = professor;
         }
         
         public Course getCourse() { return course; }
         public Professor getProfessor() { return professor; }
+        
+        @Override
+        public Category getCategory() { return Category.DOMAIN; }
+        
+        @Override
+        public Object getPayload() {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("courseId", course != null ? course.getCourseId() : null);
+            payload.put("professorId", professor != null ? professor.getUserId() : null);
+            return payload;
+        }
+        
+        @Override
+        public boolean isValid() {
+            return course != null;
+        }
+        
+        @Override
+        public String getDescription() {
+            return "New course created: " + (course != null ? course.getCourseName() : "unknown") +
+                   " by " + (professor != null ? professor.getFullName() : "unknown");
+        }
+        
+        @Override
+        protected Event createCopy(String eventId, String eventType, LocalDateTime timestamp,
+                                   String sourceSystem, String correlationId, int version,
+                                   Priority priority, String aggregateId, String aggregateType,
+                                   Long aggregateVersion, Map<String, Object> metadata) {
+            return new CourseCreatedEvent(eventId, eventType, timestamp, sourceSystem, correlationId,
+                                          version, priority, aggregateId, aggregateType,
+                                          aggregateVersion, metadata, course, professor);
+        }
     }
     
     public static class UserLoginEvent extends Event {
@@ -490,7 +636,19 @@ public class EventManager {
         private final boolean successful;
         
         public UserLoginEvent(User user, String ipAddress, boolean successful) {
-            super("UserLogin", new Date());
+            super("UserLogin");
+            this.user = user;
+            this.ipAddress = ipAddress;
+            this.successful = successful;
+        }
+        
+        private UserLoginEvent(String eventId, String eventType, LocalDateTime timestamp,
+                               String sourceSystem, String correlationId, int version,
+                               Priority priority, String aggregateId, String aggregateType,
+                               Long aggregateVersion, Map<String, Object> metadata,
+                               User user, String ipAddress, boolean successful) {
+            super(eventId, eventType, timestamp, sourceSystem, correlationId, version,
+                  priority, aggregateId, aggregateType, aggregateVersion, metadata);
             this.user = user;
             this.ipAddress = ipAddress;
             this.successful = successful;
@@ -499,23 +657,109 @@ public class EventManager {
         public User getUser() { return user; }
         public String getIpAddress() { return ipAddress; }
         public boolean isSuccessful() { return successful; }
+        
+        @Override
+        public Category getCategory() { return Category.AUDIT; }
+        
+        @Override
+        public Object getPayload() {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("userId", user != null ? user.getUserId() : null);
+            payload.put("ipAddress", ipAddress);
+            payload.put("successful", successful);
+            return payload;
+        }
+        
+        @Override
+        public boolean isValid() {
+            return user != null;
+        }
+        
+        @Override
+        public String getDescription() {
+            return "User login: " + (user != null ? user.getFullName() : "unknown") +
+                   " from " + ipAddress + " - " + (successful ? "SUCCESS" : "FAILED");
+        }
+        
+        @Override
+        protected Event createCopy(String eventId, String eventType, LocalDateTime timestamp,
+                                   String sourceSystem, String correlationId, int version,
+                                   Priority priority, String aggregateId, String aggregateType,
+                                   Long aggregateVersion, Map<String, Object> metadata) {
+            return new UserLoginEvent(eventId, eventType, timestamp, sourceSystem, correlationId,
+                                      version, priority, aggregateId, aggregateType,
+                                      aggregateVersion, metadata, user, ipAddress, successful);
+        }
     }
     
     public static class ErrorEvent extends Event {
         private final Event originalEvent;
         private final EventListener<?> failedListener;
         private final Exception error;
+        private final Date errorTime;
         
         public ErrorEvent(Event originalEvent, EventListener<?> failedListener, Exception error, Date timestamp) {
-            super("Error", timestamp);
+            super("Error", Priority.HIGH);
             this.originalEvent = originalEvent;
             this.failedListener = failedListener;
             this.error = error;
+            this.errorTime = timestamp;
+        }
+        
+        private ErrorEvent(String eventId, String eventType, LocalDateTime timestamp,
+                           String sourceSystem, String correlationId, int version,
+                           Priority priority, String aggregateId, String aggregateType,
+                           Long aggregateVersion, Map<String, Object> metadata,
+                           Event originalEvent, EventListener<?> failedListener,
+                           Exception error, Date errorTime) {
+            super(eventId, eventType, timestamp, sourceSystem, correlationId, version,
+                  priority, aggregateId, aggregateType, aggregateVersion, metadata);
+            this.originalEvent = originalEvent;
+            this.failedListener = failedListener;
+            this.error = error;
+            this.errorTime = errorTime;
         }
         
         public Event getOriginalEvent() { return originalEvent; }
         public EventListener<?> getFailedListener() { return failedListener; }
         public Exception getError() { return error; }
+        public Date getErrorTime() { return errorTime; }
+        
+        @Override
+        public Category getCategory() { return Category.SYSTEM; }
+        
+        @Override
+        public Object getPayload() {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("originalEventId", originalEvent != null ? originalEvent.getEventId() : null);
+            payload.put("listener", failedListener != null ? failedListener.getClass().getSimpleName() : null);
+            payload.put("error", error != null ? error.getMessage() : null);
+            payload.put("errorTime", errorTime);
+            return payload;
+        }
+        
+        @Override
+        public boolean isValid() {
+            return error != null;
+        }
+        
+        @Override
+        public String getDescription() {
+            return "Error processing " +
+                   (originalEvent != null ? originalEvent.getClass().getSimpleName() : "event") +
+                   ": " + (error != null ? error.getMessage() : "unknown");
+        }
+        
+        @Override
+        protected Event createCopy(String eventId, String eventType, LocalDateTime timestamp,
+                                   String sourceSystem, String correlationId, int version,
+                                   Priority priority, String aggregateId, String aggregateType,
+                                   Long aggregateVersion, Map<String, Object> metadata) {
+            return new ErrorEvent(eventId, eventType, timestamp, sourceSystem, correlationId,
+                                  version, priority, aggregateId, aggregateType,
+                                  aggregateVersion, metadata, originalEvent, failedListener,
+                                  error, errorTime);
+        }
     }
     
     /**
@@ -545,20 +789,20 @@ public class EventManager {
             
             // Add default listeners for common events
             manager.onStudentEnrolled(event -> 
-                System.out.println("Student " + event.getStudent().getName() + 
-                                 " enrolled in " + event.getCourse().getName()));
+                System.out.println("Student " + event.getStudent().getFullName() + 
+                                 " enrolled in " + event.getCourse().getCourseName()));
             
             manager.onGradeUpdated(event -> 
-                System.out.println("Grade updated for " + event.getStudent().getName() + 
-                                 " in " + event.getCourse().getName() + 
+                System.out.println("Grade updated for " + event.getStudent().getFullName() + 
+                                 " in " + event.getCourse().getCourseName() + 
                                  ": " + event.getNewGrade().getLetterGrade()));
             
             manager.onCourseCreated(event -> 
-                System.out.println("New course created: " + event.getCourse().getName() + 
-                                 " by " + event.getProfessor().getName()));
+                System.out.println("New course created: " + event.getCourse().getCourseName() + 
+                                 " by " + event.getProfessor().getFullName()));
             
             manager.onUserLogin(event -> 
-                System.out.println("User login: " + event.getUser().getName() + 
+                System.out.println("User login: " + event.getUser().getFullName() + 
                                  " from " + event.getIpAddress() + 
                                  " - " + (event.isSuccessful() ? "SUCCESS" : "FAILED")));
             

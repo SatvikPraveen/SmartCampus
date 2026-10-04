@@ -42,7 +42,7 @@ public class CommandProcessor {
      * Execute a command synchronously
      */
     public CommandResult execute(Command command) {
-        ValidationResult validation = validator.validate(command);
+        CommandValidator.ValidationResult validation = validator.validate(command);
         if (!validation.isValid()) {
             return new CommandResult(false, "Command validation failed: " + 
                                    String.join(", ", validation.getErrors()), null);
@@ -347,8 +347,8 @@ public class CommandProcessor {
         @Override
         public Object execute() throws Exception {
             try {
-                Student created = studentService.createStudent(student);
-                setResult(true, null);
+                boolean created = studentService.addStudent(student);
+                setResult(created, null);
                 return created;
             } catch (Exception e) {
                 setResult(false, e);
@@ -358,13 +358,13 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            studentService.deleteStudent(student.getId());
+            studentService.removeStudent(student.getStudentId());
             return null;
         }
         
         @Override
         public String getDescription() {
-            return "Create student: " + student.getName();
+            return "Create student: " + student.getFullName();
         }
     }
     
@@ -382,9 +382,9 @@ public class CommandProcessor {
         public Object execute() throws Exception {
             try {
                 // Store original for undo
-                originalStudent = studentService.getStudentById(newStudent.getId());
-                Student updated = studentService.updateStudent(newStudent);
-                setResult(true, null);
+                originalStudent = studentService.getStudentById(newStudent.getStudentId()).orElse(null);
+                boolean updated = studentService.updateStudent(newStudent);
+                setResult(updated, null);
                 return updated;
             } catch (Exception e) {
                 setResult(false, e);
@@ -394,13 +394,15 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            studentService.updateStudent(originalStudent);
+            if (originalStudent != null) {
+                studentService.updateStudent(originalStudent);
+            }
             return originalStudent;
         }
         
         @Override
         public String getDescription() {
-            return "Update student: " + newStudent.getName();
+            return "Update student: " + newStudent.getFullName();
         }
     }
     
@@ -418,9 +420,9 @@ public class CommandProcessor {
         public Object execute() throws Exception {
             try {
                 // Store for undo
-                deletedStudent = studentService.getStudentById(studentId);
-                studentService.deleteStudent(studentId);
-                setResult(true, null);
+                deletedStudent = studentService.getStudentById(studentId).orElse(null);
+                boolean removed = studentService.removeStudent(studentId);
+                setResult(removed, null);
                 return null;
             } catch (Exception e) {
                 setResult(false, e);
@@ -430,7 +432,9 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            studentService.createStudent(deletedStudent);
+            if (deletedStudent != null) {
+                studentService.addStudent(deletedStudent);
+            }
             return deletedStudent;
         }
         
@@ -452,8 +456,8 @@ public class CommandProcessor {
         @Override
         public Object execute() throws Exception {
             try {
-                Course created = courseService.createCourse(course);
-                setResult(true, null);
+                boolean created = courseService.addCourse(course);
+                setResult(created, null);
                 return created;
             } catch (Exception e) {
                 setResult(false, e);
@@ -463,13 +467,13 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            courseService.deleteCourse(course.getCourseCode());
+            courseService.removeCourse(course.getCourseId());
             return null;
         }
         
         @Override
         public String getDescription() {
-            return "Create course: " + course.getName();
+            return "Create course: " + course.getCourseName();
         }
     }
     
@@ -486,9 +490,9 @@ public class CommandProcessor {
         @Override
         public Object execute() throws Exception {
             try {
-                originalCourse = courseService.getCourseByCode(newCourse.getCourseCode());
-                Course updated = courseService.updateCourse(newCourse);
-                setResult(true, null);
+                originalCourse = courseService.getCourseById(newCourse.getCourseId()).orElse(null);
+                boolean updated = courseService.updateCourse(newCourse);
+                setResult(updated, null);
                 return updated;
             } catch (Exception e) {
                 setResult(false, e);
@@ -498,13 +502,15 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            courseService.updateCourse(originalCourse);
+            if (originalCourse != null) {
+                courseService.updateCourse(originalCourse);
+            }
             return originalCourse;
         }
         
         @Override
         public String getDescription() {
-            return "Update course: " + newCourse.getName();
+            return "Update course: " + newCourse.getCourseName();
         }
     }
     
@@ -521,9 +527,10 @@ public class CommandProcessor {
         @Override
         public Object execute() throws Exception {
             try {
-                deletedCourse = courseService.getCourseByCode(courseCode);
-                courseService.deleteCourse(courseCode);
-                setResult(true, null);
+                deletedCourse = courseService.filterCourses(c -> courseCode.equals(c.getCourseCode()))
+                        .stream().findFirst().orElse(null);
+                boolean removed = deletedCourse != null && courseService.removeCourse(deletedCourse.getCourseId());
+                setResult(removed, null);
                 return null;
             } catch (Exception e) {
                 setResult(false, e);
@@ -533,7 +540,9 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            courseService.createCourse(deletedCourse);
+            if (deletedCourse != null) {
+                courseService.addCourse(deletedCourse);
+            }
             return deletedCourse;
         }
         
@@ -557,7 +566,8 @@ public class CommandProcessor {
         @Override
         public Object execute() throws Exception {
             try {
-                boolean result = enrollmentService.enrollStudent(student, course);
+                boolean result = enrollmentService.enrollStudent(student.getStudentId(), course.getCourseId(),
+                                                course.getSemester(), course.getYear());
                 setResult(result, null);
                 return result;
             } catch (Exception e) {
@@ -568,13 +578,13 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            enrollmentService.unenrollStudent(student, course);
+            enrollmentService.dropStudent(student.getStudentId(), course.getCourseId(), "Command undo");
             return null;
         }
         
         @Override
         public String getDescription() {
-            return "Enroll " + student.getName() + " in " + course.getName();
+            return "Enroll " + student.getFullName() + " in " + course.getCourseName();
         }
     }
     
@@ -592,7 +602,8 @@ public class CommandProcessor {
         @Override
         public Object execute() throws Exception {
             try {
-                boolean result = enrollmentService.unenrollStudent(student, course);
+                boolean result = enrollmentService.dropStudent(student.getStudentId(), course.getCourseId(),
+                                                              "Unenrolled via command");
                 setResult(result, null);
                 return result;
             } catch (Exception e) {
@@ -603,13 +614,14 @@ public class CommandProcessor {
         
         @Override
         public Object undo() throws Exception {
-            enrollmentService.enrollStudent(student, course);
+            enrollmentService.enrollStudent(student.getStudentId(), course.getCourseId(),
+                                            course.getSemester(), course.getYear());
             return null;
         }
         
         @Override
         public String getDescription() {
-            return "Unenroll " + student.getName() + " from " + course.getName();
+            return "Unenroll " + student.getFullName() + " from " + course.getCourseName();
         }
     }
     
@@ -631,9 +643,10 @@ public class CommandProcessor {
         public Object execute() throws Exception {
             try {
                 // Store previous grade for undo
-                previousGrade = gradeService.getGrade(student, course);
-                Grade assigned = gradeService.assignGrade(student, course, newGrade);
-                setResult(true, null);
+                previousGrade = gradeService.getGradeById(newGrade.getGradeId()).orElse(null);
+                boolean assigned = previousGrade != null ? gradeService.updateGrade(newGrade)
+                                                         : gradeService.addGrade(newGrade);
+                setResult(assigned, null);
                 return assigned;
             } catch (Exception e) {
                 setResult(false, e);
@@ -644,10 +657,10 @@ public class CommandProcessor {
         @Override
         public Object undo() throws Exception {
             if (previousGrade != null) {
-                gradeService.assignGrade(student, course, previousGrade);
+                gradeService.updateGrade(previousGrade);
                 return previousGrade;
             } else {
-                gradeService.removeGrade(student, course);
+                gradeService.removeGrade(newGrade.getGradeId());
                 return null;
             }
         }
@@ -655,7 +668,7 @@ public class CommandProcessor {
         @Override
         public String getDescription() {
             return "Assign grade " + newGrade.getLetterGrade() + " to " + 
-                   student.getName() + " for " + course.getName();
+                   student.getFullName() + " for " + course.getCourseName();
         }
     }
     
