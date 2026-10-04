@@ -58,7 +58,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <springdoc.version>2.3.0</springdoc.version>
-    <jacoco.version>0.8.11</jacoco.version>
+    <jacoco.version>0.8.15</jacoco.version>
     <exec.mainClass>scheduling.experiment.ExperimentRunner</exec.mainClass>
   </properties>
 
@@ -185,7 +185,7 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
-        <version>3.1.1</version>
+        <version>3.6.4</version>
         <configuration>
           <mainClass>${exec.mainClass}</mainClass>
         </configuration>
