@@ -25,7 +25,7 @@ import org.springframework.core.env.Environment;
 @OpenAPIDefinition(
     info = @Info(
         title = "SmartCampus API",
-        version = "2.0.0",
+        version = "2.0.1",
         description = """
             Course timetabling as a service. Submit events (with enrolled students and an
             instructor), rooms and a weekly slot grid; receive a timetable produced by a

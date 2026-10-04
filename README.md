@@ -339,7 +339,7 @@ If you use SmartCampus or its benchmark results, please cite it ([`CITATION.cff`
   author  = {Praveen, Satvik},
   title   = {SmartCampus: a course-timetabling engine with reproducible benchmarks},
   year    = {2026},
-  version = {2.0.0},
+  version = {2.0.1},
   url     = {https://github.com/SatvikPraveen/SmartCampus}
 }
 ```
