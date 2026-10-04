@@ -10,9 +10,16 @@
  *       (delta) evaluation is verified against full recomputation;</li>
  *   <li>{@link scheduling.solver} &ndash; a random baseline, sequential greedy construction under
  *       several orderings (input order, largest-degree-first, DSATUR) and simulated annealing;</li>
+ *   <li>{@link scheduling.io} &ndash; a reader for the ITC-2007 post-enrolment {@code .tim}
+ *       format;</li>
  *   <li>{@link scheduling.experiment} &ndash; a seeded synthetic instance generator and a
- *       reproducible experiment runner that reports bootstrap confidence intervals.</li>
+ *       reproducible experiment runner that reports bootstrap confidence intervals, on synthetic
+ *       or ITC-2007 instances.</li>
  * </ul>
+ *
+ * <p>Optional room features, per-event slot availability and event precedence (the extra hard
+ * constraints of ITC-2007 track 2) are modelled as further hard cost components; without them
+ * the model and every solver behave exactly as before.</p>
  *
  * <p>The constraint set follows the structure popularised by the first International
  * Timetabling Competition (post-enrolment track): hard constraints on student/instructor

@@ -167,6 +167,7 @@
                     <include>scheduling.eval</include>
                     <include>scheduling.solver</include>
                     <include>scheduling.model</include>
+                    <include>scheduling.io</include>
                   </includes>
                   <limits>
                     <limit>
