@@ -19,13 +19,23 @@ import java.util.stream.Collectors;
 public class BatchProcessor {
     
     private final ExecutorService executorService;
+    // Runs the coordinating tasks that block waiting for chunk results, so they can
+    // never occupy all worker threads and starve the chunks they wait on.
+    private final ExecutorService coordinatorExecutor;
     private final ScheduledExecutorService scheduledExecutor;
     private final ForkJoinPool forkJoinPool;
     private final int batchSize;
     private final int maxConcurrentBatches;
     
     public BatchProcessor(int threadPoolSize, int batchSize, int maxConcurrentBatches) {
+        // a non-positive batch size never advances the batching loop, and zero permits
+        // block every chunk forever
+        if (batchSize <= 0 || maxConcurrentBatches <= 0) {
+            throw new IllegalArgumentException(
+                "batchSize and maxConcurrentBatches must be positive");
+        }
         this.executorService = Executors.newFixedThreadPool(threadPoolSize);
+        this.coordinatorExecutor = Executors.newCachedThreadPool();
         this.scheduledExecutor = Executors.newScheduledThreadPool(2);
         this.forkJoinPool = new ForkJoinPool(threadPoolSize);
         this.batchSize = batchSize;
@@ -121,7 +131,7 @@ public class BatchProcessor {
                     endTime - startTime
                 );
             }
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -263,7 +273,7 @@ public class BatchProcessor {
                     endTime - startTime
                 );
             }
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -354,7 +364,7 @@ public class BatchProcessor {
                     endTime - startTime
                 );
             }
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -413,11 +423,16 @@ public class BatchProcessor {
      * Shutdown the batch processor
      */
     public void shutdown() {
-        executorService.shutdown();
+        // Stop coordinators first: they still submit chunk work to the worker pool
+        coordinatorExecutor.shutdown();
         scheduledExecutor.shutdown();
-        forkJoinPool.shutdown();
         
         try {
+            if (!coordinatorExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                coordinatorExecutor.shutdownNow();
+            }
+            executorService.shutdown();
+            forkJoinPool.shutdown();
             if (!executorService.awaitTermination(30, TimeUnit.SECONDS)) {
                 executorService.shutdownNow();
             }
@@ -428,6 +443,7 @@ public class BatchProcessor {
                 forkJoinPool.shutdownNow();
             }
         } catch (InterruptedException e) {
+            coordinatorExecutor.shutdownNow();
             executorService.shutdownNow();
             scheduledExecutor.shutdownNow();
             forkJoinPool.shutdownNow();

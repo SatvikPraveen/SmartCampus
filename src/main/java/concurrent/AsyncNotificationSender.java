@@ -20,6 +20,9 @@ public class AsyncNotificationSender {
     private final NotificationService notificationService;
     private final ExecutorService notificationExecutor;
     private final ScheduledExecutorService scheduledExecutor;
+    // Runs retry loops, which block on sends executed by notificationExecutor; keeping
+    // them off that pool prevents thread-starvation deadlock.
+    private final ExecutorService retryExecutor;
     private final BlockingQueue<NotificationTask> notificationQueue;
     private final AtomicInteger activeTasks;
     private final AtomicLong totalNotificationsSent;
@@ -32,6 +35,7 @@ public class AsyncNotificationSender {
         this.notificationService = notificationService;
         this.notificationExecutor = Executors.newFixedThreadPool(threadPoolSize);
         this.scheduledExecutor = Executors.newScheduledThreadPool(2);
+        this.retryExecutor = Executors.newCachedThreadPool();
         this.notificationQueue = new LinkedBlockingQueue<>();
         this.activeTasks = new AtomicInteger(0);
         this.totalNotificationsSent = new AtomicLong(0);
@@ -185,7 +189,7 @@ public class AsyncNotificationSender {
             }
             
             return result;
-        }, notificationExecutor);
+        }, retryExecutor);
     }
     
     /**
@@ -360,10 +364,15 @@ public class AsyncNotificationSender {
     public void shutdown() {
         isRunning = false;
         
-        notificationExecutor.shutdown();
+        retryExecutor.shutdown();
         scheduledExecutor.shutdown();
         
         try {
+            // Let in-flight retry loops finish while sends can still be executed
+            if (!retryExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                retryExecutor.shutdownNow();
+            }
+            notificationExecutor.shutdown();
             if (!notificationExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
                 notificationExecutor.shutdownNow();
             }
@@ -371,6 +380,7 @@ public class AsyncNotificationSender {
                 scheduledExecutor.shutdownNow();
             }
         } catch (InterruptedException e) {
+            retryExecutor.shutdownNow();
             notificationExecutor.shutdownNow();
             scheduledExecutor.shutdownNow();
             Thread.currentThread().interrupt();

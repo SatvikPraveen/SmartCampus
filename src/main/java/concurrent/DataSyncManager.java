@@ -23,6 +23,9 @@ public class DataSyncManager {
     private final EnrollmentRepository enrollmentRepository;
     
     private final ExecutorService executorService;
+    // Runs the coordinating tasks that block on sub-tasks executed by executorService, so
+    // coordinators can never occupy every worker thread and starve their own sub-tasks.
+    private final ExecutorService coordinatorExecutor;
     private final ScheduledExecutorService scheduledExecutor;
     private final AtomicBoolean syncInProgress;
     private final AtomicLong lastSyncTime;
@@ -41,6 +44,7 @@ public class DataSyncManager {
         
         this.executorService = Executors.newFixedThreadPool(
             Runtime.getRuntime().availableProcessors());
+        this.coordinatorExecutor = Executors.newCachedThreadPool();
         this.scheduledExecutor = Executors.newScheduledThreadPool(2);
         this.syncInProgress = new AtomicBoolean(false);
         this.lastSyncTime = new AtomicLong(0);
@@ -97,7 +101,7 @@ public class DataSyncManager {
             } finally {
                 syncInProgress.set(false);
             }
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -136,7 +140,7 @@ public class DataSyncManager {
                 return new SyncResult(false, 
                     "External sync failed: " + e.getMessage(), new Date());
             }
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -160,7 +164,7 @@ public class DataSyncManager {
             );
             
             CompletableFuture.allOf(cacheTasks.toArray(new CompletableFuture[0])).join();
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -184,7 +188,7 @@ public class DataSyncManager {
             }
             
             return new ValidationResult(validationErrors.isEmpty(), validationErrors);
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -239,7 +243,7 @@ public class DataSyncManager {
             } catch (Exception e) {
                 return new BackupResult(false, "Backup failed: " + e.getMessage(), null);
             }
-        }, executorService);
+        }, coordinatorExecutor);
     }
     
     /**
@@ -408,10 +412,15 @@ public class DataSyncManager {
     // Shutdown method
     
     public void shutdown() {
-        executorService.shutdown();
+        // Stop coordinators first: they still submit sub-tasks to the worker pool
+        coordinatorExecutor.shutdown();
         scheduledExecutor.shutdown();
         
         try {
+            if (!coordinatorExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                coordinatorExecutor.shutdownNow();
+            }
+            executorService.shutdown();
             if (!executorService.awaitTermination(30, TimeUnit.SECONDS)) {
                 executorService.shutdownNow();
             }
@@ -419,6 +428,7 @@ public class DataSyncManager {
                 scheduledExecutor.shutdownNow();
             }
         } catch (InterruptedException e) {
+            coordinatorExecutor.shutdownNow();
             executorService.shutdownNow();
             scheduledExecutor.shutdownNow();
             Thread.currentThread().interrupt();
