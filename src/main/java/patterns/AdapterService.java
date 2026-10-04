@@ -220,7 +220,7 @@ public class AdapterService {
             }
             
             private String[] parseCsvLine(String line) {
-                return line.split(",");
+                return line.split(",", -1); // keep trailing empty fields
             }
         }
         
@@ -242,7 +242,7 @@ public class AdapterService {
                     emptyToNull(data.get("departmentId"))
                 );
                 course.setProfessorId(emptyToNull(data.get("professorId")));
-                course.setSemester(data.get("semester"));
+                course.setSemester(emptyToNull(data.get("semester")));
                 if (data.containsKey("year")) {
                     course.setYear(Integer.parseInt(data.get("year")));
                 }
@@ -264,7 +264,9 @@ public class AdapterService {
                 xml.append("<professorId>").append(
                     course.getProfessorId() != null ? course.getProfessorId() : ""
                 ).append("</professorId>");
-                xml.append("<semester>").append(course.getSemester()).append("</semester>");
+                xml.append("<semester>").append(
+                    course.getSemester() != null ? escapeXml(course.getSemester()) : ""
+                ).append("</semester>");
                 xml.append("<year>").append(course.getYear()).append("</year>");
                 xml.append("<capacity>").append(course.getMaxEnrollment()).append("</capacity>");
                 xml.append("<enrolled>").append(course.getEnrolledStudentIds().size()).append("</enrolled>");
@@ -274,21 +276,24 @@ public class AdapterService {
             
             private Map<String, String> parseSimpleXml(String xml) {
                 Map<String, String> data = new HashMap<>();
-                // Simplified XML parsing - extract text between tags
-                String[] lines = xml.split("\n");
-                for (String line : lines) {
-                    line = line.trim();
-                    if (line.startsWith("<") && line.endsWith(">") && !line.startsWith("</")) {
-                        int tagEnd = line.indexOf('>');
-                        int closeTagStart = line.lastIndexOf('<');
-                        if (tagEnd > 0 && closeTagStart > tagEnd) {
-                            String tagName = line.substring(1, tagEnd);
-                            String value = line.substring(tagEnd + 1, closeTagStart);
-                            data.put(tagName, value);
-                        }
-                    }
+                // Simplified XML parsing - extract the text of every leaf element <tag>value</tag>,
+                // whether elements are on separate lines or all on one line (as convertCourseToXml emits)
+                java.util.regex.Matcher m = LEAF_ELEMENT.matcher(xml);
+                while (m.find()) {
+                    data.put(m.group(1), unescapeXml(m.group(2).trim()));
                 }
                 return data;
+            }
+
+            private static final java.util.regex.Pattern LEAF_ELEMENT =
+                java.util.regex.Pattern.compile("<(\\w+)>([^<]*)</\\1>");
+
+            private String unescapeXml(String text) {
+                return text.replace("&lt;", "<")
+                          .replace("&gt;", ">")
+                          .replace("&quot;", "\"")
+                          .replace("&apos;", "'")
+                          .replace("&amp;", "&");
             }
             
             private String escapeXml(String text) {
@@ -468,7 +473,8 @@ public class AdapterService {
         public String adaptDataType(String originalType) {
             Map<String, Map<String, String>> typeMap = createDataTypeMapping();
             
-            Map<String, String> targetMapping = typeMap.get(sourceDialect + "_to_" + targetDialect);
+            Map<String, String> targetMapping = typeMap.get(
+                (sourceDialect + "_to_" + targetDialect).toLowerCase(Locale.ROOT));
             return targetMapping != null ? targetMapping.getOrDefault(originalType.toUpperCase(), originalType) : originalType;
         }
         
