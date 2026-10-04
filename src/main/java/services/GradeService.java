@@ -102,10 +102,10 @@ public class GradeService implements Searchable<Grade>, Reportable {
      * @return true if grade was updated successfully, false otherwise
      */
     public boolean updateGrade(Grade grade) {
-        if (grade == null || !grades.containsKey(grade.getGradeId())) {
+        if (grade == null || grade.getGradeId() == null || !grades.containsKey(grade.getGradeId())) {
             return false;
         }
-        
+
         Grade existingGrade = grades.get(grade.getGradeId());
         grades.put(grade.getGradeId(), grade);
         
@@ -210,6 +210,14 @@ public class GradeService implements Searchable<Grade>, Reportable {
         }
         
         Grade grade = Grade.createGrade(null, studentId, courseId, assignmentName, component, pointsPossible);
+        // Generated IDs derive from millis % 10000 and can repeat for the same
+        // student/course/assignment; make the ID unique within this service.
+        String baseId = grade.getGradeId();
+        String candidate = baseId;
+        for (int suffix = 1; grades.containsKey(candidate); suffix++) {
+            candidate = baseId + "_" + suffix;
+        }
+        grade.setGradeId(candidate);
         // A new grade starts as DRAFT, which Grade.gradeAssignment refuses to grade;
         // record the submission first so the points are actually applied.
         grade.submitAssignment();

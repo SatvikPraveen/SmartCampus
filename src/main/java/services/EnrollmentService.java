@@ -984,6 +984,8 @@ public class EnrollmentService implements Enrollable, Searchable<Enrollment>, Re
                 return Comparator.comparing(Enrollment::getYear);
             case "status":
                 return Comparator.comparing(Enrollment::getStatus);
+            case "grade":
+                return Comparator.comparing(Enrollment::getGrade, Comparator.nullsLast(Comparator.naturalOrder()));
             default:
                 return Comparator.comparing(Enrollment::getEnrollmentDate);
         }
