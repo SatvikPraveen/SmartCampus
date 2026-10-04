@@ -41,6 +41,7 @@ public class ReportService implements Reportable {
     private final Map<String, ReportData> reportCache;
     private final Map<String, ReportMetadata> reportHistory;
     private final Map<String, ScheduledReport> scheduledReports;
+    private final java.util.concurrent.atomic.AtomicLong reportSequence = new java.util.concurrent.atomic.AtomicLong();
     
     // Method reference examples for different types
     
@@ -176,7 +177,7 @@ public class ReportService implements Reportable {
         List<Map<String, Object>> rows = enrollmentService.getAllEnrollments()
                 .stream()
                 .filter(Objects::nonNull)
-                .filter(this::isEnrollmentInDateRange)
+                .filter(enrollment -> isEnrollmentInDateRange(enrollment, parameters))
                 .map(this::convertEnrollmentToRow)
                 .sorted(this::compareEnrollmentRows)
                 .collect(Collectors.toList());
@@ -463,7 +464,10 @@ public class ReportService implements Reportable {
         row.put("Entity", metric.entityType() + ": " + metric.entityName());
         row.put("Metric", metric.metricName());
         row.put("Value", formatMetricValue(metric.value()));
-        row.put("Trend", calculateTrend(metric.value()));
+        // Trend thresholds are percentages, so normalise the value against its benchmark
+        // (GPA out of 4.0, rating out of 5.0, enrollment rate out of 100%).
+        double benchmark = parseNumericValue(metric.benchmark().replace("%", ""));
+        row.put("Trend", calculateTrend(benchmark > 0 ? metric.value() * 100.0 / benchmark : metric.value()));
         row.put("Benchmark", metric.benchmark());
         return row;
     }
@@ -517,7 +521,7 @@ public class ReportService implements Reportable {
     // Additional utility methods using method references
     
     private String generateReportId() {
-        return "RPT_" + System.currentTimeMillis() + "_" + System.nanoTime() % 1000;
+        return "RPT_" + System.currentTimeMillis() + "_" + reportSequence.incrementAndGet();
     }
     
     private void cacheReport(ReportData report) {
@@ -639,9 +643,19 @@ public class ReportService implements Reportable {
         return validationCheck.test(formatted) ? formatted : "Invalid";
     }
     
-    private boolean isEnrollmentInDateRange(Enrollment enrollment) {
-        // Simplified date range check
-        return enrollment.getEnrollmentDate().isAfter(LocalDateTime.now().minusMonths(6));
+    private boolean isEnrollmentInDateRange(Enrollment enrollment, Map<String, Object> parameters) {
+        LocalDateTime enrolledAt = enrollment.getEnrollmentDate();
+        if (enrolledAt == null) {
+            return false;
+        }
+        // Honour an explicit range (see generateReportForDateRange); default to the last 6 months
+        Object start = parameters != null ? parameters.get("startDate") : null;
+        Object end = parameters != null ? parameters.get("endDate") : null;
+        if (start instanceof LocalDateTime || end instanceof LocalDateTime) {
+            return (!(start instanceof LocalDateTime from) || !enrolledAt.isBefore(from))
+                    && (!(end instanceof LocalDateTime to) || !enrolledAt.isAfter(to));
+        }
+        return enrolledAt.isAfter(LocalDateTime.now().minusMonths(6));
     }
     
     private Map<String, Object> createEnrollmentMetadata() {
