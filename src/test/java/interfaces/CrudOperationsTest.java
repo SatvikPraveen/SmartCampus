@@ -26,7 +26,7 @@ class CrudOperationsTest {
         @Override public String createWithId(Integer id, String entity) throws CrudException {
             createWithIdCalls++;
             if (store.containsKey(id)) {
-                throw new CrudException(CrudOperation.CREATE, (Object) id, "duplicate");
+                throw new CrudException(CrudOperation.CREATE, id, "duplicate");
             }
             store.put(id, entity);
             return entity;
@@ -147,7 +147,7 @@ class CrudOperationsTest {
 
         @Test
         void entityIdConstructors() {
-            CrudException e = new CrudException(CrudOperation.READ, (Object) 42L, "missing");
+            CrudException e = new CrudException(CrudOperation.READ, 42L, "missing");
             assertThat(e).hasMessage("CRUD operation 'READ' failed for entity '42': missing");
             assertThat(e.getOperation()).isEqualTo(CrudOperation.READ);
             assertThat(e.getEntityId()).isEqualTo(42L);
@@ -160,9 +160,20 @@ class CrudOperationsTest {
             assertThat(withCause.getEntityId()).isEqualTo(7);
         }
 
+        // Regression: a String id used to bind to the (operation, entityType, message) constructor, so it was
+        // reported as an entity type and getEntityId() returned null.
         @Test
-        void entityTypeConstructor() {
-            CrudException e = new CrudException(CrudOperation.COUNT, "Student", "db down");
+        void stringEntityIdIsTreatedAsAnId() {
+            CrudException e = new CrudException(CrudOperation.READ, "STU000001", "missing");
+
+            assertThat(e).hasMessage("CRUD operation 'READ' failed for entity 'STU000001': missing");
+            assertThat(e.getEntityId()).isEqualTo("STU000001");
+            assertThat(e.getEntityType()).isNull();
+        }
+
+        @Test
+        void entityTypeFactory() {
+            CrudException e = CrudException.forEntityType(CrudOperation.COUNT, "Student", "db down");
 
             assertThat(e).hasMessage("CRUD operation 'COUNT' failed for entity type 'Student': db down");
             assertThat(e.getEntityType()).isEqualTo("Student");

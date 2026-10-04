@@ -384,10 +384,20 @@ public interface CrudOperations<T, ID> {
             this.entityType = null;
         }
         
-        public CrudException(CrudOperation operation, String entityType, String message) {
-            super(String.format("CRUD operation '%s' failed for entity type '%s': %s", operation, entityType, message));
+        /**
+         * Creates an exception about a whole entity type rather than one entity. This is a named factory
+         * instead of a constructor because a {@code (CrudOperation, String, String)} constructor would be
+         * chosen over {@code (CrudOperation, Object, String)} for every String id.
+         */
+        public static CrudException forEntityType(CrudOperation operation, String entityType, String message) {
+            return new CrudException(operation, null, entityType,
+                    String.format("CRUD operation '%s' failed for entity type '%s': %s", operation, entityType, message));
+        }
+        
+        private CrudException(CrudOperation operation, Object entityId, String entityType, String formattedMessage) {
+            super(formattedMessage);
             this.operation = operation;
-            this.entityId = null;
+            this.entityId = entityId;
             this.entityType = entityType;
         }
         
