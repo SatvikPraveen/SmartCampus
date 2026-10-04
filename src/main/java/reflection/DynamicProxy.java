@@ -6,6 +6,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Dynamic proxy implementation using Java's Proxy API
@@ -384,52 +385,57 @@ public class DynamicProxy {
      * Cache interceptor for @Cacheable methods
      */
     private static class CacheInterceptor implements MethodInterceptor {
+        private record Entry(Object value, long expiresAtNanos) { }
+        
         private final Cacheable cacheableAnnotation;
+        private final long ttlNanos;
+        private final Map<List<Object>, Entry> cache;
         
         public CacheInterceptor(Cacheable cacheableAnnotation) {
             this.cacheableAnnotation = cacheableAnnotation;
+            this.ttlNanos = cacheableAnnotation.ttl() > 0
+                    ? TimeUnit.SECONDS.toNanos(cacheableAnnotation.ttl()) : Long.MAX_VALUE;
+            int maxEntries = Math.max(1, cacheableAnnotation.maxEntries());
+            // access-ordered, so the eldest entry is the least recently used one
+            this.cache = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<List<Object>, Entry> eldest) {
+                    return size() > maxEntries;
+                }
+            });
         }
         
         @Override
         public Object intercept(InvocationContext context) throws Throwable {
-            // Generate cache key
-            String cacheKey = generateCacheKey(context);
+            List<Object> cacheKey = generateCacheKey(context);
+            long now = System.nanoTime();
             
-            // Try to get from cache
-            Object cachedResult = getFromCache(cacheKey);
-            if (cachedResult != null) {
-                return cachedResult;
+            Entry cached = cache.get(cacheKey);
+            if (cached != null) {
+                if (cached.expiresAtNanos() == Long.MAX_VALUE || now - cached.expiresAtNanos() < 0) {
+                    return cached.value();
+                }
+                cache.remove(cacheKey, cached);
             }
             
-            // Proceed with method execution
             Object result = context.proceed();
             
-            // Store in cache
-            putInCache(cacheKey, result);
+            if (result != null || cacheableAnnotation.cacheNullValues()) {
+                long expiresAt = ttlNanos == Long.MAX_VALUE ? Long.MAX_VALUE : now + ttlNanos;
+                cache.put(cacheKey, new Entry(result, expiresAt));
+            }
             
             return result;
         }
         
-        private String generateCacheKey(InvocationContext context) {
-            StringBuilder keyBuilder = new StringBuilder();
-            keyBuilder.append(context.getMethod().getName());
-            
-            if (context.getArguments() != null) {
-                for (Object arg : context.getArguments()) {
-                    keyBuilder.append("_").append(arg != null ? arg.hashCode() : "null");
-                }
-            }
-            
-            return keyBuilder.toString();
+        // Keyed by the argument values themselves (not their hash codes, which can collide)
+        private List<Object> generateCacheKey(InvocationContext context) {
+            Object[] args = context.getArguments();
+            return args == null ? List.of() : Arrays.asList(args.clone());
         }
         
-        private Object getFromCache(String key) {
-            // Placeholder - would integrate with actual cache implementation
-            return null;
-        }
-        
-        private void putInCache(String key, Object value) {
-            // Placeholder - would integrate with actual cache implementation
+        int size() {
+            return cache.size();
         }
     }
     

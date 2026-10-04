@@ -503,4 +503,100 @@ class DynamicProxyTest {
             assertThat(new DynamicProxy.ProxyCreationException("p", cause)).hasCause(cause);
         }
     }
+
+    // ==================== CACHING ====================
+
+    public interface Lookup {
+        @Cacheable
+        String find(String key);
+
+        @Cacheable(maxEntries = 2)
+        String bounded(String key);
+
+        @Cacheable(ttl = 1)
+        String shortLived(String key);
+
+        @Cacheable
+        String maybeNull(String key);
+
+        @Cacheable(cacheNullValues = true)
+        String nullCached(String key);
+    }
+
+    static class CountingLookup implements Lookup {
+        final AtomicInteger calls = new AtomicInteger();
+
+        @Override public String find(String key) { calls.incrementAndGet(); return "v-" + key; }
+        @Override public String bounded(String key) { calls.incrementAndGet(); return "b-" + key; }
+        @Override public String shortLived(String key) { calls.incrementAndGet(); return "s-" + key; }
+        @Override public String maybeNull(String key) { calls.incrementAndGet(); return null; }
+        @Override public String nullCached(String key) { calls.incrementAndGet(); return null; }
+    }
+
+    // Regression: the @Cacheable interceptor's get/put were empty placeholders, so every call reached the target.
+    @Nested
+    class Caching {
+        private final CountingLookup lookup = new CountingLookup();
+        private final Lookup cached = DynamicProxy.createProxy(Lookup.class, lookup);
+
+        @Test
+        void repeatedCallsWithEqualArgumentsHitTheTargetOnce() {
+            assertThat(cached.find("a")).isEqualTo("v-a");
+            assertThat(cached.find("a")).isEqualTo("v-a");
+            assertThat(cached.find(new String("a"))).isEqualTo("v-a");
+            assertThat(cached.find(null)).isEqualTo("v-null");
+            assertThat(cached.find(null)).isEqualTo("v-null");
+
+            assertThat(lookup.calls).hasValue(2);
+        }
+
+        @Test
+        void leastRecentlyUsedEntryIsEvictedAtMaxEntries() {
+            cached.bounded("a");
+            cached.bounded("b");
+            cached.bounded("a");      // a is now more recently used than b
+            cached.bounded("c");      // evicts b
+            assertThat(lookup.calls).hasValue(3);
+
+            cached.bounded("a");
+            assertThat(lookup.calls).hasValue(3);
+            cached.bounded("b");
+            assertThat(lookup.calls).hasValue(4);
+        }
+
+        @Test
+        void entriesExpireAfterTheirTtl() throws InterruptedException {
+            cached.shortLived("a");
+            cached.shortLived("a");
+            assertThat(lookup.calls).hasValue(1);
+
+            Thread.sleep(1_100);
+
+            cached.shortLived("a");
+            assertThat(lookup.calls).hasValue(2);
+        }
+
+        @Test
+        void nullResultsAreCachedOnlyWhenRequested() {
+            cached.maybeNull("a");
+            cached.maybeNull("a");
+            assertThat(lookup.calls).hasValue(2);
+
+            cached.nullCached("a");
+            cached.nullCached("a");
+            assertThat(lookup.calls).hasValue(3);
+        }
+
+        @Test
+        void eachProxyHasItsOwnCache() {
+            CountingLookup other = new CountingLookup();
+            Lookup otherProxy = DynamicProxy.createProxy(Lookup.class, other);
+
+            cached.find("a");
+            otherProxy.find("a");
+
+            assertThat(lookup.calls).hasValue(1);
+            assertThat(other.calls).hasValue(1);
+        }
+    }
 }
