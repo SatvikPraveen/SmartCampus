@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software or its benchmark results, please cite it as below."
+title: "SmartCampus: a course-timetabling engine with reproducible benchmarks"
+abstract: >-
+  SmartCampus provides a post-enrolment university course timetabling engine with an exact
+  incremental cost model, constructive (greedy, largest-degree, DSATUR) and simulated-annealing
+  solvers, a seeded synthetic instance generator and a paired benchmarking harness reporting
+  bootstrap confidence intervals, exposed through a Spring Boot REST service alongside a
+  university-management domain library.
+type: software
+authors:
+  - family-names: Praveen
+    given-names: Satvik
+    email: satvikpraveen707@gmail.com
+repository-code: "https://github.com/SatvikPraveen/SmartCampus"
+license: MIT
+version: 2.0.0
+date-released: 2026-10-04
+keywords:
+  - course timetabling
+  - graph colouring
+  - DSATUR
+  - simulated annealing
+  - combinatorial optimisation
+  - reproducibility
