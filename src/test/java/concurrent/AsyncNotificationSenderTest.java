@@ -402,6 +402,28 @@ class AsyncNotificationSenderTest {
     }
 
     @Test
+    void shutdownDeliversNotificationsStillWaitingInTheQueue() {
+        AsyncNotificationSender sender = sender(service(r -> false), 2, 10_000);
+
+        for (int i = 0; i < 50; i++) {
+            sender.queueNotification(task(NotificationType.EMAIL, "pending" + i + "@u.edu"));
+        }
+        sender.shutdown();
+
+        assertThat(sent).hasSize(50);
+        assertThat(sender.getStatistics().getTotalSent()).isEqualTo(50);
+    }
+
+    @Test
+    void queueingAfterShutdownIsRejectedInsteadOfSilentlyDropped() {
+        AsyncNotificationSender sender = sender();
+        sender.shutdown();
+
+        assertThatThrownBy(() -> sender.queueNotification(task(NotificationType.EMAIL, "late@u.edu")))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void shutdownRejectsNewNotificationsAndIsIdempotent() {
         AsyncNotificationSender sender = sender();
         sender.shutdown();

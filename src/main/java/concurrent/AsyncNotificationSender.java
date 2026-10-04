@@ -29,6 +29,7 @@ public class AsyncNotificationSender {
     private final AtomicLong failedNotifications;
     private final RateLimiter rateLimiter;
     private volatile boolean isRunning;
+    private Thread queueProcessor;
     
     public AsyncNotificationSender(NotificationService notificationService, 
                                  int threadPoolSize, int maxNotificationsPerSecond) {
@@ -232,6 +233,9 @@ public class AsyncNotificationSender {
      * Queue notification for processing
      */
     public void queueNotification(NotificationTask task) {
+        if (!isRunning) {
+            throw new IllegalStateException("AsyncNotificationSender has been shut down");
+        }
         try {
             notificationQueue.put(task);
         } catch (InterruptedException e) {
@@ -266,6 +270,7 @@ public class AsyncNotificationSender {
         processor.setDaemon(true);
         processor.setName("NotificationProcessor");
         processor.start();
+        queueProcessor = processor;
     }
     
     /**
@@ -363,6 +368,18 @@ public class AsyncNotificationSender {
      */
     public void shutdown() {
         isRunning = false;
+        
+        // Hand anything still queued to the executor before it stops accepting work, then stop
+        // the processor thread (it may be waiting in poll) and wait for its last hand-off.
+        List<NotificationTask> pending = new ArrayList<>();
+        notificationQueue.drainTo(pending);
+        pending.forEach(this::executeNotificationTask);
+        queueProcessor.interrupt();
+        try {
+            queueProcessor.join(TimeUnit.SECONDS.toMillis(5));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         
         retryExecutor.shutdown();
         scheduledExecutor.shutdown();
